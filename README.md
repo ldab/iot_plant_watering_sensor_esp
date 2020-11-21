@@ -2,7 +2,7 @@
 Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 
 [![GitHub version](https://img.shields.io/github/release/ldab/iot_plant_watering_sensor_esp32.svg)](https://github.com/ldab/iot_plant_watering_sensor_esp32/releases/latest)
-[![Build Status](https://travis-ci.com/ldab/iot_plant_watering_sensor_esp32.svg?branch=master)](https://travis-ci.com/ldab/iot_plant_watering_sensor_esp32)
+[![Build Status](https://api.travis-ci.com/ldab/iot_plant_watering_sensor_esp.svg)](https://travis-ci.com/github/ldab/iot_plant_watering_sensor_esp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/ldab/iot_plant_watering_sensor_esp32/blob/master/LICENSE)
 
 [![GitHub last commit](https://img.shields.io/github/last-commit/ldab/iot_plant_watering_sensor_esp32.svg?style=social)](https://github.com/ldab/iot_plant_watering_sensor_esp32)
