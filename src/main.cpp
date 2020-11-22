@@ -9,6 +9,12 @@ Distributed as-is; no warranty is given.
 
 #include <Arduino.h>
 
+#include "FS.h"
+#include "FFat.h"
+
+#include <driver/adc.h>
+#include <esp_adc_cal.h>
+
 #include "secrets.h"
 
 #include <Ticker.h>
@@ -18,6 +24,12 @@ Distributed as-is; no warranty is given.
 #include "ArduinoHttpClient.h"
 #include "PubSubClient.h"
 #include "RTClib.h"
+
+#ifdef VERBOSE
+  #define DBG(msg, ...)     { Serial.printf("[%ld] " msg , millis(), ##__VA_ARGS__); }
+#else
+  #define DBG(...)
+#endif
 
 // MQTT reconnection timeout in ms
 #define MQTT_RC_TIMEOUT 5000
@@ -45,6 +57,10 @@ float  temp_setpoint  = NAN;
 
 #define SLEEP_TIME_S    (8 * 60 * 60)     //seconds
 
+#define PWM_CHANNEL     0
+#define PWM_FREQUENCY   1000000L          // 1MHz
+#define PWM_RESOLUTION  8                 // bits     
+
 // initialize the MQTT Client
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -56,11 +72,8 @@ HttpClient http_mail(espClient, "emailserver.com");
 // RTC instance
 RTC_PCF8563 rtc;
 
-char iso8601date[21]      = "";
-
-// Sense if wake is from RTC or Button
-// May not need, as one can read the I2C and confirm, to check power requirements
-const uint8_t INT_PIN = 2; 
+int16_t capSensorThrs = -1;
+char iso8601date[21]  = "";
 
 // Timer instances
 Ticker mqtt_rc;
@@ -72,8 +85,7 @@ void setup_wifi()
 
   if (WiFi.SSID() != wifi_ssid)
   {
-    Serial.print("\nConnecting to ");
-    Serial.println(wifi_ssid);
+    DBG("\nConnecting to %s\n", wifi_ssid);
 
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
@@ -89,15 +101,14 @@ void setup_wifi()
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
     //TODO
-    Serial.print("PROBLEM!!");
+    DBG("\n PROBLEM!! \n");
   }
   else
   {
     randomSeed(micros());
 
-    Serial.println("\nWiFi connected");
-    Serial.println("IP address: ");
-    Serial.println(WiFi.localIP());
+    DBG("\nWiFi connected\n");
+    DBG("IP address: %X\n", WiFi.localIP());
   }
 }
 
@@ -105,16 +116,15 @@ void callback(char* topic, byte* payload, uint32_t length)
 {
   char _payload[length];
 
-  Serial.print("Message arrived [");
-  Serial.print(topic);
-  Serial.print("] ");
+  DBG("Message arrived [%s]", topic);
+
   for (uint32_t i = 0; i < length; i++)
   {
     _payload[i] = (char)payload[i];
 
-    Serial.print(_payload[i]);
+    DBG("%c", _payload[i]);
   }
-  Serial.println();
+  DBG("\n");
 
   if( strcmp(topic, sub_topic) )
   {
@@ -124,7 +134,7 @@ void callback(char* topic, byte* payload, uint32_t length)
 
 void reconnect()
 {
-    Serial.print("Attempting MQTT connection...");
+    DBG("Attempting MQTT connection...\n");
 
     String clientId = "ESP32-";
     clientId += WiFi.macAddress();
@@ -132,14 +142,13 @@ void reconnect()
     // Attempt to connect
     if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass))
     {
-      Serial.println("connected");
+      DBG("connected\n");
       // Once connected, subscribe to topic
       client.subscribe( sub_topic );
     }
     else
     {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
+      DBG("failed, rc=%d", client.state());
     }
   
   client.connected();
@@ -151,42 +160,59 @@ void read_temp()
   //temp = thermocouple.readCelsius();
   if( isnan(temp) )
   {
-    Serial.println("Something wrong with thermocouple!");
+    DBG("Something wrong with thermocouple!\n");
   } 
   else 
   {
-    Serial.print("C = ");
-    Serial.println(temp);
+    DBG("C = %d\n", temp);
   }
 }
 
-void chirp()
+void inline static beep()
 {
-  // radio off to save power
+  digitalWrite(BUZZER, HIGH);
+  delay(42);
+  digitalWrite(BUZZER, LOW);
+}
+
+void static chirp(uint8_t times)
+{
+  /*
+    // radio off to save power
   btStop();
   WiFi.mode( WIFI_OFF );
 
   //ligth sleep 0.8mA https://lastminuteengineers.com/esp32-sleep-modes-power-consumption/
   esp_sleep_enable_timer_wakeup( 666 );
   esp_light_sleep_start();
+  */
+ 
+  while (times-- > 0)
+  {
+      beep();
+      delay(40);
+  }
 }
 
 void read_moisture()
 {
-  uint8_t pwm_channel    = 0;
-  uint8_t pwm_pin        = 0;
-  double  pwn_freq       = 1000000; // 1Mhz
-  uint8_t pwm_resolution = 8; //0 - 255
 
-  ledcSetup(pwm_channel, pwn_freq, pwm_resolution);
-  ledcAttachPin(pwm_pin, pwm_channel);
-  ledcWrite(pwm_channel, ((2 ^ pwm_resolution) - 1) / 2);
+  ledcWrite(PWM_CHANNEL, ((2 ^ PWM_RESOLUTION) - 1) / 2);
+
+  capSensorThrs = analogRead(C_SENSE);
 
   if ( false )
   {
     client.publish("topic", "DRY", true); //publish retained
-    chirp();
     // TODO email or something else
+
+    WiFi.mode(WIFI_OFF);
+
+    chirp(9);
+    delay(350);
+    chirp(1);
+    delay(50);
+    chirp(1);
   }
   else
   {
@@ -211,7 +237,7 @@ void getInternetTime()
 
   int statusCode = http_time.responseStatusCode();
 
-  Serial.printf("GET Status code: %d\n", statusCode);
+  DBG("GET Status code: %d\n", statusCode);
 
   if (statusCode != 200)
   {
@@ -234,21 +260,122 @@ void getInternetTime()
   response.toCharArray(iso8601date, sizeof(iso8601date));  
 }
 
-void setup()
+void pinInit()
 {
-  Serial.begin(115200);
+  pinMode(BUZZER, OUTPUT);
 
-  while (!Serial) delay(1); // wait for Serial on Leonardo/Zero, etc
+  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+  ledcAttachPin(PWM, PWM_CHANNEL);
+  
+  pinMode(C_SENSE, INPUT);                // ADC -> not needed
+  adc1_config_width( ADC_WIDTH_BIT_11 );  // Reduce ADC resolution due to reported noise on 12 bits
+  adc1_config_channel_atten( ADC1_CHANNEL_5, ADC_ATTEN_DB_11 );   // -11dB attenuation (ADC_ATTEN_DB_11) gives full-scale voltage 3.6V
 
-  Serial.println("RTC init");
+  esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11, 1098, adc_chars);  // !! TODO calibrate Vref
+
+  analogSetCycles(8);  // default is 8 and seems OK
+  analogSetSamples(1); // default is 1
+}
+
+void RTC_init()
+{
+  DBG("RTC init\n");
   
   Wire.begin(SDA_PIN, SCL_PIN, 100000L);
   if (! rtc.begin())
   {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
+    DBG("Couldn't find RTC\n");
+    delay(100);
     abort();
   }
+}
+
+int16_t readThrs(void)
+{
+  const char * path = "/threshold.txt";
+
+  DBG("Reading file: %s\r\n", path);
+  
+  if(!FFat.begin())
+  {
+    DBG("FFat Mount Failed\n");
+    return -1;
+  }
+  DBG("Total space: %10u\n", FFat.totalBytes());
+  DBG("Free space: %10u\n", FFat.freeBytes());
+
+  File file = FFat.open(path);
+  if(!file || file.isDirectory())
+  {
+    DBG("- failed to open file for reading\n");
+    return -1;
+  }
+
+  DBG("Read from file: ");
+  
+  uint8_t i = 0;
+  char    t[5] = ""; 
+
+  while(file.available())
+  {
+    t[i] = file.read();
+    DBG("%c", t[i]);
+    i++;
+  }
+  file.close();
+
+  return atoi(t);
+}
+
+void deleteFile(void)
+{
+  const char * path = "/threshold.txt";
+  
+  DBG("Deleting file: %s\n", path);
+  if(FFat.remove(path)){
+      DBG("File deleted\n");
+  } else {
+      DBG("Delete failed\n");
+  }
+}
+
+void writeFile(int16_t _t)
+{
+  deleteFile();
+
+  const char * path = "/threshold.txt";
+
+  DBG("Writing file: %s\n", path);
+
+  File file = FFat.open(path, FILE_WRITE);
+  if(!file){
+    DBG("Failed to open file for writing\n");
+    return;
+  }
+  if(file.print(_t)){
+    DBG("File written\n");
+  } else {
+    DBG("Write failed\n");
+  }
+  file.close();
+}
+
+void setup()
+{
+  #ifdef VERBOSE
+    Serial.begin(115200);
+    while (!Serial) delay(1); // wait for Serial on Leonardo/Zero, etc
+  #endif
+
+  #ifdef CALIBRATE
+    // Measure GPIO in order to determine Vref GPIO_NUM_4 == SCL -> R7
+    adc2_vref_to_gpio( GPIO_NUM_4 );
+    delay(5000);
+    abort();
+  #endif
+
+  capSensorThrs = readThrs();
 
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
@@ -256,7 +383,7 @@ void setup()
 
   if (rtc.lostPower())
   {
-    Serial.println("RTC is NOT initialized, let's set the time!");
+    DBG("RTC is NOT initialized, let's set the time!\n");
     // When time needs to be set on a new device, or after a power loss, the
     // following line sets the RTC to the date & time this sketch was compiled
     rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
