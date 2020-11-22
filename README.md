@@ -2,7 +2,7 @@
 Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 
 [![GitHub version](https://img.shields.io/github/release/ldab/iot_plant_watering_sensor_esp32.svg)](https://github.com/ldab/iot_plant_watering_sensor_esp32/releases/latest)
-[![Build Status](https://api.travis-ci.com/ldab/iot_plant_watering_sensor_esp.svg)](https://travis-ci.com/github/ldab/iot_plant_watering_sensor_esp)
+[![Build Status](https://api.travis-ci.com/ldab/iot_plant_watering_sensor_esp32.svg)](https://travis-ci.com/github/ldab/iot_plant_watering_sensor_esp32)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](https://github.com/ldab/iot_plant_watering_sensor_esp32/blob/master/LICENSE)
 
 [![GitHub last commit](https://img.shields.io/github/last-commit/ldab/iot_plant_watering_sensor_esp32.svg?style=social)](https://github.com/ldab/iot_plant_watering_sensor_esp32)
@@ -95,3 +95,5 @@ https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/per
 Github Shields and Badges created with [Shields.io](https://github.com/badges/shields/)
 
 Inspired by [chirp! - the plant watering alarm](https://wemakethings.net/chirp/)
+
+ESP32 Pin definition and overview https://randomnerdtutorials.com/esp32-pinout-reference-gpios/ 
