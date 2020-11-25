@@ -9,6 +9,7 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 
  ## TODO
 
+- [ ] Better battery polarity indication and reverse polarity protection;
 - [ ] Check if `esp_light_sleep_start()` improves current vs `delay(x)`
 - [ ] Inspect connection time if BSSID is saved vs Saving time
 - [ ] FFAT vs SPIFFS time
@@ -16,6 +17,18 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 ## VOID
 
 "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum."
+
+## Working modes and button
+
+* The device will check the moisture 2x a day, at 8am and 6pm;
+* On Sundays it will connect to the internet and check time, etc;
+* Insert the battery **WATCH THE POLAITY**;
+* Press and hold the `config` button;
+  * keep it pressed, it will connect to the internet, get the time and date and calibrate the sensor;
+  * if everything goes well, it buzzes like this [link for audio]()
+* If the battery voltage is lower than 2V, a `TBD` will be sent and it buzzes like this [link for audio]()
+* If the soil is drier than the setpoint, a `TBD` will be sent and it buzzes like this [link for audio]()
+* If a new level of alarm is nedded, press and hold the config button until a buzz like this [link for audio]() is heard;
 
 ## PSEUDO-CODE
 
@@ -85,6 +98,10 @@ https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/per
 ## PCB
 
 <img src="./pics/iot_plant_watering_sensor_esp32_PCB.png" width="50%"> 
+
+## Enclosure
+
+<img src="./pics/iot_plant_watering_sensor_esp32_enclosure.png" width="50%"> 
 
 ## Known Limitations
 
