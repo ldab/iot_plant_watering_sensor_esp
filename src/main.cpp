@@ -22,6 +22,7 @@ Distributed as-is; no warranty is given.
 #include <WiFi.h>
 
 #include "ArduinoHttpClient.h"
+#include "HttpClient.h"
 #include "PubSubClient.h"
 #include "RTClib.h"
 
@@ -50,12 +51,12 @@ double temp           = NAN;
 float  temp_setpoint  = NAN;
 
 #define C_SENSE         A5                //GPIO33 - IO33/ADC1_CH5
+#define BATT_ADC        A4                //GPIO32 - IO32/ADC1_CH4
+#define BATT_EN         A11               //GPIO0
 #define PWM             A14               //GPIO13
 #define BUZZER          A15               //GPIO12
 #define SDA_PIN         A13               //GPIO15
 #define SCL_PIN         A10               //GPIO04
-
-#define SLEEP_TIME_S    (8 * 60 * 60)     //seconds
 
 #define PWM_CHANNEL     0
 #define PWM_FREQUENCY   1000000L          // 1MHz
@@ -72,8 +73,9 @@ HttpClient http_mail(espClient, "emailserver.com");
 // RTC instance
 RTC_PCF8563 rtc;
 
-int16_t capSensorThrs = -1;
-char iso8601date[21]  = "";
+int16_t capSensorThrs  = -1;
+int16_t capSensorSense = -1;
+char iso8601date[]     = "2000-01-01T00:00:00";
 
 // Timer instances
 Ticker mqtt_rc;
@@ -85,7 +87,7 @@ void setup_wifi()
 
   if (WiFi.SSID() != wifi_ssid)
   {
-    DBG("\nConnecting to %s\n", wifi_ssid);
+    DBG("Connecting to %s\n", wifi_ssid);
 
     WiFi.mode(WIFI_STA);
     WiFi.setAutoReconnect(true);
@@ -98,17 +100,16 @@ void setup_wifi()
     WiFi.persistent( true );
   }
 
-  if (WiFi.waitForConnectResult() != WL_CONNECTED)
+  while ( millis() < 20000 )
   {
-    //TODO
-    DBG("\n PROBLEM!! \n");
+    int8_t wifi_result = WiFi.waitForConnectResult();
+    if ( wifi_result == WL_CONNECTED) break;
+    DBG("\n WiFi connect failed: %d\n", wifi_result);
   }
-  else
+  if(WiFi.status() == WL_CONNECTED)
   {
     randomSeed(micros());
-
     DBG("\nWiFi connected\n");
-    DBG("IP address: %X\n", WiFi.localIP());
   }
 }
 
@@ -134,22 +135,22 @@ void callback(char* topic, byte* payload, uint32_t length)
 
 void reconnect()
 {
-    DBG("Attempting MQTT connection...\n");
+  DBG("Attempting MQTT connection...\n");
 
-    String clientId = "ESP32-";
-    clientId += WiFi.macAddress();
+  String clientId = "ESP32-";
+  clientId += WiFi.macAddress();
 
-    // Attempt to connect
-    if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass))
-    {
-      DBG("connected\n");
-      // Once connected, subscribe to topic
-      client.subscribe( sub_topic );
-    }
-    else
-    {
-      DBG("failed, rc=%d", client.state());
-    }
+  // Attempt to connect
+  if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass))
+  {
+    DBG("connected\n");
+    // Once connected, subscribe to topic
+    client.subscribe( sub_topic );
+  }
+  else
+  {
+    DBG("failed, rc=%d", client.state());
+  }
   
   client.connected();
 }
@@ -164,7 +165,7 @@ void read_temp()
   } 
   else 
   {
-    DBG("C = %d\n", temp);
+    DBG("C = %f\n", temp);
   }
 }
 
@@ -199,7 +200,9 @@ void read_moisture()
 
   ledcWrite(PWM_CHANNEL, ((2 ^ PWM_RESOLUTION) - 1) / 2);
 
-  capSensorThrs = analogRead(C_SENSE);
+  capSensorSense = analogRead(C_SENSE);
+
+  ledcWrite(PWM_CHANNEL, 0);
 
   if ( false )
   {
@@ -250,32 +253,49 @@ void getInternetTime()
 
   String response = http_time.responseBody();
 
-  int _index = response.indexOf("\"currentDateTime\": ");
+  String search = "\"currentDateTime\":\"";
+  int _index = response.indexOf(search);
 
-  // "currentDateTime": "2020-11-22T11:10Z",
-  response.substring(_index + 20, _index + 20 + 17);
-  // RTC lib expect seconds, so insert 00 to avoid trouble
-  response += ":00Z";
+  // "currentDateTime":"2020-11-22T22:34+01:00"
+  String _iso8601date = response.substring(_index + search.length(), _index + search.length() + 16);
 
-  response.toCharArray(iso8601date, sizeof(iso8601date));  
+  // RTC lib expect seconds, so insert 00 to avoid trouble <-> "2000-01-01T00:00:00"
+  _iso8601date.toCharArray(iso8601date, strlen(iso8601date) - 2);
+  iso8601date[16] = ':';
+  iso8601date[17] = '0';
+  iso8601date[18] = '0';
+  DBG("time ISO from HTTP is %s\n", iso8601date);  
 }
 
 void pinInit()
 {
   pinMode(BUZZER, OUTPUT);
 
+  pinMode(BATT_EN, OUTPUT_OPEN_DRAIN);
+
   ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
   ledcAttachPin(PWM, PWM_CHANNEL);
   
   pinMode(C_SENSE, INPUT);                // ADC -> not needed
+  pinMode(BATT_ADC, INPUT);                // ADC -> not needed
   adc1_config_width( ADC_WIDTH_BIT_11 );  // Reduce ADC resolution due to reported noise on 12 bits
   adc1_config_channel_atten( ADC1_CHANNEL_5, ADC_ATTEN_DB_11 );   // -11dB attenuation (ADC_ATTEN_DB_11) gives full-scale voltage 3.6V
+  adc1_config_channel_atten( ADC1_CHANNEL_4, ADC_ATTEN_DB_11 );   // -11dB attenuation (ADC_ATTEN_DB_11) gives full-scale voltage 3.6V
 
   esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
   esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11, 1098, adc_chars);  // !! TODO calibrate Vref
 
   analogSetCycles(8);  // default is 8 and seems OK
   analogSetSamples(1); // default is 1
+}
+
+uint16_t getBattmilliVcc()
+{
+  uint8_t raw;
+  digitalWrite(BATT_EN, LOW);
+  delay(50); // ??
+  raw = analogRead(BATT_ADC);
+  return((raw * 3600 / 2^11) *2);
 }
 
 void RTC_init()
@@ -289,6 +309,9 @@ void RTC_init()
     delay(100);
     abort();
   }
+
+  // Disable CLKOUT @ 200nA vs 550nA when active
+  rtc.writeSqwPinMode( PCF8563_SquareWaveOFF );
 }
 
 int16_t readThrs(void)
@@ -296,20 +319,12 @@ int16_t readThrs(void)
   const char * path = "/threshold.txt";
 
   DBG("Reading file: %s\r\n", path);
-  
-  if(!FFat.begin())
-  {
-    DBG("FFat Mount Failed\n");
-    return -1;
-  }
-  DBG("Total space: %10u\n", FFat.totalBytes());
-  DBG("Free space: %10u\n", FFat.freeBytes());
 
   File file = FFat.open(path);
   if(!file || file.isDirectory())
   {
     DBG("- failed to open file for reading\n");
-    return -1;
+    return -2;
   }
 
   DBG("Read from file: ");
@@ -328,10 +343,8 @@ int16_t readThrs(void)
   return atoi(t);
 }
 
-void deleteFile(void)
+void deleteFile(const char * path)
 {
-  const char * path = "/threshold.txt";
-  
   DBG("Deleting file: %s\n", path);
   if(FFat.remove(path)){
       DBG("File deleted\n");
@@ -342,9 +355,9 @@ void deleteFile(void)
 
 void writeFile(int16_t _t)
 {
-  deleteFile();
-
   const char * path = "/threshold.txt";
+
+  deleteFile(path);
 
   DBG("Writing file: %s\n", path);
 
@@ -369,41 +382,68 @@ void setup()
   #endif
 
   #ifdef CALIBRATE
-    // Measure GPIO in order to determine Vref GPIO_NUM_4 == SCL -> R7
-    adc2_vref_to_gpio( GPIO_NUM_4 );
+    // Measure GPIO in order to determine Vref GPIO_NUM_12 == BUZZER -> R11
+    adc2_vref_to_gpio( GPIO_NUM_12 );
     delay(5000);
     abort();
   #endif
 
-  capSensorThrs = readThrs();
-
-  setup_wifi();
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
+  if(!FFat.begin())
+  {
+    DBG("FFat Mount Failed\n");
+    return;
+  }
+  DBG("Total space: %10u\n", FFat.totalBytes());
+  DBG("Free space: %10u\n", FFat.freeBytes());
 
   if (rtc.lostPower())
   {
     DBG("RTC is NOT initialized, let's set the time!\n");
-    // When time needs to be set on a new device, or after a power loss, the
-    // following line sets the RTC to the date & time this sketch was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    // This line sets the RTC with an explicit date & time, for example to set
-    // January 21, 2014 at 3am you would call:
-    // rtc.adjust(DateTime(2014, 1, 21, 3, 0, 0));
-    //
-    // Note: allow 2 seconds after inserting battery or applying external power
-    // without battery before calling adjust(). This gives the PCF8523's
-    // crystal oscillator time to stabilize. If you call adjust() very quickly
-    // after the RTC is powered, lostPower() may still return true.
+    setup_wifi();
+    getInternetTime();
+    rtc.adjust(DateTime(iso8601date));
 
+    rtc.setAlarm(11, 00);
+  }
+
+  if( !rtc.alarmFired() )    // Interrupt from button, wait and confirm
+  {
+    esp_sleep_enable_timer_wakeup( 1000000L );
+    esp_light_sleep_start();
+    
+    if( !rtc.alarmFired() )  // sanity check
+    {
+      chirp(2);
+      read_moisture();
+      writeFile(capSensorSense);
+
+      getInternetTime();
+      rtc.adjust(DateTime(iso8601date));
+
+      rtc.setAlarm(18, 00);
+
+      chirp(5);
+    }
+  }
+
+  capSensorThrs = readThrs();
+
+  if( capSensorThrs == -2 ) // First time, no Threshold loaded
+  {
+    read_moisture();
+    writeFile(capSensorSense);
+
+    getInternetTime();
     rtc.adjust(DateTime(iso8601date));
   }
+
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
 
   // When the RTC was stopped and stays connected to the battery, it has
   // to be restarted by clearing the STOP bit. Let's do this to ensure
   // the RTC is running.
   rtc.start();
-
 }
 
 void loop()
