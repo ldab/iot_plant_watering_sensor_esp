@@ -4,6 +4,8 @@
 .vscode/launch.json
 .vscode/ipch
 .vscode/extensions.json
+.vscode/settings.json
+build/
 
 #include/secrets.h
 # For PCBs designed using KiCad: http://www.kicad-pcb.org/
@@ -36,4 +38,3 @@ fp-info-cache
 *.csv
 PCB/iot_plant_watering_sensor_esp32/iot_plant_watering_sensor_esp32-cache.lib
 PCB/iot_plant_watering_sensor_esp32/fp-lib-table
-.vscode/settings.json

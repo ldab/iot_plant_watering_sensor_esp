@@ -73,7 +73,7 @@ main()
 
 ## Calibrating ADC for ESP32
 
-* ADC on ESP32 has been reported being innacurate, therefore one can use ```adc2_vref_to_gpio( GPIO_NUM_4 );``` to route `Vref` to `GPIO_NUM_4` that can be measured over `SCL -> Rx` in order to calibrate during ADC measurement.
+* ADC on ESP32 has been reported being innacurate, therefore one can use ```adc2_vref_to_gpio( GPIO_NUM_12 );``` to route `Vref` to `GPIO_NUM_12` that can be measured over `BUZZER -> Rx` in order to calibrate during ADC measurement.
 * Calling for `esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11, Vref, adc_chars);`
 
 https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/peripherals/adc.html
