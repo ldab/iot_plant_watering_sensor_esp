@@ -12,7 +12,6 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 - [ ] Better battery polarity indication and reverse polarity protection;
 - [ ] Check if `esp_light_sleep_start()` improves current vs `delay(x)`
 - [ ] Inspect connection time if BSSID is saved vs Saving time
-- [ ] FFAT vs SPIFFS time
 
 ## VOID
 
@@ -90,6 +89,20 @@ main()
 * Calling for `esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11, Vref, adc_chars);`
 
 https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/peripherals/adc.html
+
+## FFat and time
+
+```
+  [641] IP address: 192.168.0.22
+  Contacting Time Server
+  [854] Now is : 2020-11-27T16:37:33
+  Writing file: /hello.txt
+  File written
+  [1030] DONE writing, took: 176ms
+  Reading file: /hello.txt
+  Read from file: 2020-11-27T16:37:33
+  [1093] DONE reading, took: 5ms
+```
 
 ## Schematic
 

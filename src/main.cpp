@@ -25,6 +25,12 @@ Distributed as-is; no warranty is given.
 #include "PubSubClient.h"
 #include "RTClib.h"
 
+#ifndef DEVICE_NAME
+  #error Remember to define the Device Name
+#elif not defined TO
+  #error Remember to set the email address
+#endif
+
 #ifdef VERBOSE
 #define DBG(msg, ...)                                     \
   {                                                       \
@@ -40,18 +46,18 @@ Distributed as-is; no warranty is given.
 // Temperature reading timer in seconds
 #define TEMP_TIMEOUT 1
 
-#define C_SENSE  A5  //GPIO33 - IO33/ADC1_CH5
-#define BATT_ADC A4  //GPIO32 - IO32/ADC1_CH4
-#define BATT_EN  A11 //GPIO0
-#define PWM      A14 //GPIO13
-#define BUZZER   A15 //GPIO12
-#define SDA_PIN  A13 //GPIO15
-#define SCL_PIN  A10 //GPIO04
+#define C_SENSE A5  //GPIO33 - IO33/ADC1_CH5
+#define BATT_ADC A4 //GPIO32 - IO32/ADC1_CH4
+#define BATT_EN A11 //GPIO0
+#define PWM A14     //GPIO13
+#define BUZZER A15  //GPIO12
+#define SDA_PIN A13 //GPIO15
+#define SCL_PIN A10 //GPIO04
 
-#define PWM_CHANNEL    0
+#define PWM_CHANNEL 0
 #define BUZZER_CHANNEL 1
-#define PWM_FREQUENCY  1000000L // 1MHz
-#define PWM_RESOLUTION 8        // bits
+#define PWM_FREQUENCY 1000000L // 1MHz
+#define PWM_RESOLUTION 8       // bits
 
 // Update these with values suitable for your network.
 const char *wifi_ssid = s_wifi_ssid;
@@ -65,8 +71,19 @@ const char *ha_server = s_ha_server;
 uint16_t ha_port = s_ha_port;
 
 const char *sub_topic = "chirp/water";
-const char *moisture_topic = "chirp/moisture";
-const char *batt_topic = "chirp/water";
+const char *moisture_topic = "/states/binary_sensor.esp_banana_moisture";
+const char *batt_topic = "/states/binary_sensor.esp_banana_batt";
+
+/*
+{
+    "to": "email",
+    "state": "off",
+    "attributes": {
+        "friendly_name": "ESP_BANANA_moisture",
+        "device_class": "moisture"
+    }
+}
+*/
 
 // initialize the MQTT Client
 WiFiClient espClient;
@@ -199,7 +216,7 @@ int16_t read_moisture()
   int16_t _adc;
 
   ledcWrite(PWM_CHANNEL, ((2 ^ PWM_RESOLUTION) - 1) / 2);
-  
+
   delay(100); // TODO test the time required to stabilize
 
   _adc = analogRead(C_SENSE);
@@ -211,10 +228,19 @@ int16_t read_moisture()
 
 void getInternetTime()
 {
-  // http://worldclockapi.com/api/json/cet/now
+  uint8_t timezone = 1;
+  uint8_t daysavetime = 1;
+
+  configTime(3600 * timezone, daysavetime * 3600, "dk.pool.ntp.org", "0.pool.ntp.org", "1.pool.ntp.org");
+  struct tm tmstruct;
+  tmstruct.tm_year = 0;
+  getLocalTime(&tmstruct, 5000); // TODO timeout
+  sprintf(iso8601date, "%d-%02d-%02dT%02d:%02d:%02d\n", (tmstruct.tm_year) + 1900, (tmstruct.tm_mon) + 1,
+          tmstruct.tm_mday, tmstruct.tm_hour, tmstruct.tm_min, tmstruct.tm_sec);
+  DBG("\nNow is : %s\n", iso8601date);
 
   http_time.beginRequest();
-
+  // http://worldclockapi.com/api/json/cet/now
   http_time.get("/api/json/cet/now");
 
   // or get from home assistant
@@ -260,18 +286,21 @@ void sendPost(bool dry, uint16_t battery, String payload)
   /*
   curl -X POST -H "Authorization: Bearer ABCDEFGH" \
     -H "Content-Type: application/json" \
-    -d '{"state": "25", "attributes": {"unit_of_measurement": "°C"}}' \
+    -d '{"state": "25"}' \
     http://localhost:8123/api/states/sensor.kitchen_temperature
   */
 
-  String state = (dry) ? "DRY" : "OK";
-  float batt = (float)battery/1000.0;
-
+  String state = (dry) ? "on" : "off"; // "on" means moisture detected (wet), "off" means no moisture (dry)
+  float batt = (float)battery / 1000.0;
+  /*
   String postData = "{\"attributes\": {";
   //postData += "\"altitude\": " + alt + ", ";
   postData += "\"friendly_name\": \"" + (String)DEVICE_NAME + "\", ";
   postData += "\"battery\": "         + String(batt, 2) + "}, ";
   postData += "\"state\": \""         + state + "\"}";
+*/
+
+  String postData = "{\"state\": \"" + state + "\"}";
 
   http_ha.beginRequest();
   http_ha.post("/api/states/device_tracker.bike_test");
@@ -310,8 +339,8 @@ void pinInit()
   ledcSetup(BUZZER_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
 
-  pinMode(C_SENSE, INPUT);                                    // ADC -> not needed
-  pinMode(BATT_ADC, INPUT);                                   // ADC -> not needed
+  pinMode(C_SENSE, INPUT);  // ADC -> not needed
+  pinMode(BATT_ADC, INPUT); // ADC -> not needed
 
   adc1_config_width(ADC_WIDTH_BIT_11);                        // Reduce ADC resolution due to reported noise on 12 bits
   adc1_config_channel_atten(ADC1_CHANNEL_5, ADC_ATTEN_DB_11); // -11dB attenuation (ADC_ATTEN_DB_11) gives full-scale voltage 3.6V
@@ -355,16 +384,18 @@ void rtc_init()
   // to be restarted by clearing the STOP bit. Let's do this to ensure
   // the RTC is running.
   rtc.start();
-
 }
 
 void powerOff(DateTime now)
 {
   WiFi.disconnect(true); // TODO check if false changes time
 
-  if (now.hour() >= 18) {
+  if (now.hour() >= 18)
+  {
     rtc.setAlarm(8, 00);
-  }else {
+  }
+  else
+  {
     rtc.setAlarm(18, 00);
   }
   rtc.clearAlarm();
@@ -395,7 +426,7 @@ int16_t readThreshold(void)
     i++;
   }
   DBG("\n");
-  
+
   file.close();
 
   return atoi(t);
@@ -460,12 +491,12 @@ void setup()
   }
   DBG("Total space: %10u\n", FFat.totalBytes());
   DBG("Free space: %10u\n", FFat.freeBytes());
-  
+
   rtc_init();
 
   DateTime now = rtc.now();
   DBG("RTC date is: %d-%d-%dT%d:%d:%d", now.year(), now.month(),
-       now.day(), now.hour(), now.minute(), now.second());
+      now.day(), now.hour(), now.minute(), now.second());
 
   if (rtc.lostPower() || now.dayOfTheWeek() == 0)
   {
@@ -481,7 +512,8 @@ void setup()
     chirp(2);
     // only wait for the button press if reaches here quickly
     // otherwise it'd indicates internet connection
-    if (millis() < 1000) {
+    if (millis() < 1000)
+    {
       esp_sleep_enable_timer_wakeup(2000000L); // TODO decide time
       esp_light_sleep_start();
     }
@@ -491,7 +523,7 @@ void setup()
       chirp(2);
       capSensorSense = read_moisture();
       writeThreshold(capSensorSense);
-/* TODO
+      /* TODO
       getInternetTime();
       rtc.adjust(DateTime(iso8601date));
       rtc.setAlarm(18, 00);
@@ -505,7 +537,8 @@ void setup()
   capSensorSense = read_moisture();
   uint16_t batt = getBattmilliVcc();
 
-  if (capSensorSense < capSensorThrs) {
+  if (capSensorSense < capSensorThrs)
+  {
     DBG("DRY\n");
     chirp(9);
     delay(350);
@@ -515,7 +548,8 @@ void setup()
 
     // send HTTP POST low battery
   }
-  else if (batt < 2000){
+  else if (batt < 2000)
+  {
     DBG("Low battery\n");
     chirp(9);
     delay(350);
@@ -527,10 +561,10 @@ void setup()
   }
 
   powerOff(now);
-  
+
   //client.setServer(mqtt_server, mqtt_port);
   //client.setCallback(callback);
-  
+
   DBG("Should never get here+\n");
 }
 
