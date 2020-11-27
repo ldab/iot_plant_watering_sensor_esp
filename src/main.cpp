@@ -26,9 +26,9 @@ Distributed as-is; no warranty is given.
 #include "RTClib.h"
 
 #ifndef DEVICE_NAME
-  #error Remember to define the Device Name
+#error Remember to define the Device Name
 #elif not defined TO
-  #error Remember to set the email address
+#error Remember to set the email address
 #endif
 
 #ifdef VERBOSE
@@ -67,8 +67,8 @@ const char *mqtt_user = s_mqtt_user;
 const char *mqtt_pass = s_mqtt_pass;
 uint16_t mqtt_port = s_mqtt_port;
 
-const char *ha_server = s_ha_server;
-uint16_t ha_port = s_ha_port;
+const char *ha_server = "s_ha_server";
+uint16_t ha_port = 1883;
 
 const char *sub_topic = "chirp/water";
 const char *moisture_topic = "/states/binary_sensor.esp_banana_moisture";
@@ -309,7 +309,7 @@ void sendPost(bool dry, uint16_t battery, String payload)
 
   // or get from home assistant
   String _bearer = "Bearer ";
-  _bearer.concat(S_ha_token);
+  //_bearer.concat(S_ha_token);
   http_ha.sendHeader("Authorization", _bearer);
 
   http_ha.endRequest();
@@ -537,7 +537,8 @@ void setup()
   capSensorSense = read_moisture();
   uint16_t batt = getBattmilliVcc();
 
-  if (capSensorSense < capSensorThrs)
+  // high is dry
+  if (capSensorSense > capSensorThrs)
   {
     DBG("DRY\n");
     chirp(9);
@@ -546,7 +547,14 @@ void setup()
     delay(50);
     chirp(1);
 
-    // send HTTP POST low battery
+    // Home Assistant -> on means moisture detected (wet), off means no moisture (dry)
+    char topic[strlen("/states/binary_sensor.moisture") + strlen(DEVICE_NAME)];
+    sprintf(topic, "/states/binary_sensor.%s_moisture", DEVICE_NAME);
+
+    char payload[160];
+    sprintf(payload, "{\"to\": \"%s\",\"state\": \"off\",\"attributes\": {\"friendly_name\": \"%s_moisture\",\"device_class\": \"moisture\"}}", TO, DEVICE_NAME);
+
+    client.publish(topic, payload);
   }
   else if (batt < 2000)
   {
@@ -557,7 +565,14 @@ void setup()
     delay(50);
     chirp(1);
 
-    // send HTTP POST low battery
+    // Home Assistant -> on means low, off means normal
+    char topic[strlen("/states/binary_sensor.batt") + strlen(DEVICE_NAME)];
+    sprintf(topic, "/states/binary_sensor.%s_batt", DEVICE_NAME);
+
+    char payload[160];
+    sprintf(payload, "{\"to\": \"%s\",\"state\": \"on\",\"attributes\": {\"friendly_name\": \"%s_batt\",\"device_class\": \"battery\"}}", TO, DEVICE_NAME);
+
+    client.publish(topic, payload);
   }
 
   powerOff(now);
