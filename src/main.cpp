@@ -183,7 +183,7 @@ void reconnect()
 
 void inline static beep()
 {
-  ledcWrite(BUZZER_CHANNEL, ((2 ^ PWM_RESOLUTION) - 1) / 2);
+  ledcWrite(BUZZER_CHANNEL, ((uint32_t)pow(2, PWM_RESOLUTION) - 1) / 2);
 
   //digitalWrite(BUZZER, HIGH);
   delay(42);
@@ -333,11 +333,12 @@ void pinInit()
 
   pinMode(BATT_EN, OUTPUT_OPEN_DRAIN);
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+  pinMode(PWM, OUTPUT);
   ledcAttachPin(PWM, PWM_CHANNEL);
+  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
 
-  ledcSetup(BUZZER_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
+  ledcSetup(BUZZER_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
 
   pinMode(C_SENSE, INPUT);  // ADC -> not needed
   pinMode(BATT_ADC, INPUT); // ADC -> not needed
@@ -449,7 +450,7 @@ void writeThreshold(int16_t _t)
 {
   const char *path = "/threshold.txt";
 
-  deleteFile(path);
+  //deleteFile(path); // not needed
   DBG("Writing file: %s\n", path);
 
   File file = FFat.open(path, FILE_WRITE);
@@ -484,7 +485,7 @@ void setup()
   abort();
 #endif
 
-  if (!FFat.begin())
+  if (!FFat.begin(true))
   {
     DBG("FFat Mount Failed\n");
     return; // TODO
