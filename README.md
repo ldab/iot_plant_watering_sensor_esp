@@ -114,7 +114,7 @@ https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/per
 
 ## Enclosure
 
-<img src="./pics/iot_plant_watering_sensor_esp32_enclosure.png" width="50%"> 
+<a href="./enclosure"><img src="./pics/iot_plant_watering_sensor_esp32_enclosure_round.gif" width="50%"></a>
 
 ## Known Limitations
 
