@@ -29,6 +29,26 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 * If the soil is drier than the setpoint, a `TBD` will be sent and it buzzes like this [link for audio]()
 * If a new level of alarm is nedded, press and hold the config button until a buzz like this [link for audio]() is heard;
 
+## Component selection and Capacitive probe
+
+* We need the most range on the voltage across the probe as possible, considering
+
+**`Vc = 3 * (1 - e(-t / (R * C)))`**
+
+    Varying R from 100 to 15000 Ω @ 1MHz:
+
+    ![](.pics/R_graph.png)
+
+    [Wolfram Alpha - R Graph](https://www.wolframalpha.com/input/?i=plot+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*50*10%5E-12%29%29%29+-+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*200*10%5E-12%29%29%29%2C+R%3D+100+to+15000)¨
+
+    From the graph below we go with 5KΩ, the capacitance of the probe varies from 50pF to 200pF:
+
+    ![](.pics/C_graph.png)
+
+    [Wolfram Alpha - C Graph](https://www.wolframalpha.com/input/?i=plot+3+*+%281+-+e%5E%28-500*10%5E-9%2F%285000*C%29%29%29%2C+C%3D50*10%5E-12+to+200*10%5E-12)
+
+* With a voltage range of 2.6 to 1.2 **~1.4V**.
+
 ## PSEUDO-CODE
 
 ```
