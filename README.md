@@ -25,8 +25,8 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 * Press and hold the `config` button;
   * keep it pressed, it will connect to the internet, get the time and date and calibrate the sensor;
   * if everything goes well, it buzzes like this [link for audio]()
-* If the battery voltage is lower than 2V, a `TBD` will be sent and it buzzes like this [link for audio]()
-* If the soil is drier than the setpoint, a `TBD` will be sent and it buzzes like this [link for audio]()
+* If the battery voltage is lower than 2V, an `email` will be sent and it buzzes like this [link for audio](./ringtones/urgent.mid)
+* If the soil is drier than the setpoint, an `email` will be sent and it buzzes like this [link for audio]()
 * If a new level of alarm is nedded, press and hold the config button until a buzz like this [link for audio]() is heard;
 
 ## Component selection and Capacitive probe
