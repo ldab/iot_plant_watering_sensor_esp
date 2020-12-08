@@ -27,6 +27,8 @@ const char *HauntHouse[] = {
     "1a4",  "1p",  "2a4",   "2e",  "2d#", "2b4", "2a4", "2c",  "2d",  "2a#4",
     "2e.",  "e",   "1f4",   "1a4", "1d#", "2e.", "d",   "2c.", "b4",  "1a4"};
 
+// https://www.vex.net/~lawrence/ringtones.html#nonmusic
+
 const char *Skala[] = {"d=4", "o=5", "b=160", "32c", "32d",  "32e",
                        "32f", "32g", "32a",   "32b", "32c6", "32b",
                        "32a", "32g", "32f",   "32e", "32d",  "32c"};

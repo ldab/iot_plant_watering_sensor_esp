@@ -30,7 +30,7 @@ Distributed as-is; no warranty is given.
 
 #ifdef VERBOSE
 #define DBG(msg, ...) \
-  { Serial.printf("[%ld] " msg, millis(), ##__VA_ARGS__); }
+  { Serial.printf("[%lu] " msg, millis(), ##__VA_ARGS__); }
 #else
 #define DBG(...)
 #endif
