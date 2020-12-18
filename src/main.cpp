@@ -15,9 +15,12 @@ Distributed as-is; no warranty is given.
 #include <esp_adc_cal.h>
 
 #include "ArduinoHttpClient.h"
+#include "AsyncMqttClient.h"
 #include "FFat.h"
 #include "FS.h"
-#include "PubSubClient.h"
+#include "soc/rtc_cntl_reg.h"  //disable brownout problems
+#include "soc/soc.h"           //disable brownout problems
+//#include "PubSubClient.h"
 #include "RTClib.h"
 #include "RTTTL.h"
 #include "secrets.h"
@@ -62,13 +65,6 @@ const char *mqtt_user = s_mqtt_user;
 const char *mqtt_pass = s_mqtt_pass;
 uint16_t mqtt_port = s_mqtt_port;
 
-const char *ha_server = "s_ha_server";
-uint16_t ha_port = 1883;
-
-const char *sub_topic = "chirp/water";
-const char *moisture_topic = "/states/binary_sensor.esp_banana_moisture";
-const char *batt_topic = "/states/binary_sensor.esp_banana_batt";
-
 /*
 {
     "to": "email",
@@ -82,12 +78,9 @@ const char *batt_topic = "/states/binary_sensor.esp_banana_batt";
 
 // initialize the MQTT Client
 WiFiClient espClient;
-PubSubClient client(espClient);
-
-// HTTP clients
-HttpClient http_time(espClient, "worldclockapi.com");
-HttpClient http_ha(espClient, ha_server, ha_port);
-HttpClient http_mail(espClient, "emailserver.com");
+// PubSubClient client(espClient);
+AsyncMqttClient mqttClient;
+bool published = false;
 
 // RTC instance
 RTC_PCF8563 rtc;
@@ -96,19 +89,12 @@ int16_t capSensorThrs = -1;
 int16_t capSensorSense = -1;
 char iso8601date[] = "2000-01-01T00:00:00";
 
-// Timer instances
-Ticker mqtt_rc;
-Ticker temp_reader;
-
 void WiFiEvent(WiFiEvent_t event) {
   DBG("[WiFi-event] event: %d\n", event);
 
   switch (event) {
     case SYSTEM_EVENT_STA_CONNECTED:
       DBG("Connected to access point\n");
-      char id[32];
-      sprintf(id, "%s-%s", DEVICE_NAME, WiFi.macAddress().c_str());
-      client.connect(id, mqtt_user, mqtt_pass);
       break;
     case SYSTEM_EVENT_STA_DISCONNECTED:
       DBG("Disconnected from WiFi access point\n");
@@ -127,7 +113,8 @@ void setup_wifi() {
 
   char id[32];
   sprintf(id, "%s-%s", DEVICE_NAME, WiFi.macAddress().c_str());
-  WiFi.setHostname(id);
+  DBG("Device name is %s\n", id);
+
   WiFi.onEvent(WiFiEvent);
 
   if (WiFi.SSID() != wifi_ssid) {
@@ -139,62 +126,54 @@ void setup_wifi() {
     // int32_t wifi_channel = WiFi.channel();
     // uint8_t wifi_bssid[6]; //{0xF8, 0xD1, 0x11, 0x24, 0xB3, 0x84};
 
+    // https://github.com/espressif/arduino-esp32/issues/2537
+    WiFi.config(
+        INADDR_NONE, INADDR_NONE,
+        INADDR_NONE);  // call is only a workaround for bug in WiFi class
+
     // WiFi.begin(wifi_ssid, wifi_password, wifi_channel, wifi_bssid);
     WiFi.begin(wifi_ssid, wifi_password);
 
-    WiFi.persistent(true);
+    WiFi.setHostname(id);
+
+    WiFi.persistent(true);  // TODO maybe false as WiFI should start off
   }
 
   while (millis() < 10000)  // TODO
   {
     int8_t wifi_result = WiFi.waitForConnectResult();
     if (wifi_result == WL_CONNECTED) break;
-    DBG("\n WiFi connect failed: %d\n", wifi_result);
+    DBG(" WiFi connect failed: %d\n", wifi_result);
   }
   if (WiFi.status() == WL_CONNECTED) {
     randomSeed(micros());
-    DBG("\nWiFi connected\n");
-  }
-}
+    DBG(" WiFi connected\n");
 
-void callback(char *topic, byte *payload, uint32_t length) {
-  char _payload[length];
-
-  DBG("Message arrived [%s]", topic);
-
-  for (uint32_t i = 0; i < length; i++) {
-    _payload[i] = (char)payload[i];
-    DBG("%c", _payload[i]);
-  }
-  DBG("\n");
-
-  if (strcmp(topic, sub_topic)) {
-    // DO something
-    // temp_setpoint = atof(_payload);
-  }
-}
-
-void reconnect() {
-  DBG("Attempting MQTT connection...\n");
-
-  String clientId = "ESP32-";
-  clientId += WiFi.macAddress();
-
-  // Attempt to connect
-  if (client.connect(clientId.c_str(), mqtt_user, mqtt_pass)) {
-    DBG("connected\n");
-    // Once connected, subscribe to topic
-    client.subscribe(sub_topic);
+    mqttClient.setServer(mqtt_server, mqtt_port);
+    mqttClient.setCredentials(mqtt_user, mqtt_pass);
+    mqttClient.setClientId(id);
+    DBG("Connecting to MQTT Server %s\n", mqtt_server);
+    mqttClient.connect();
   } else {
-    DBG("failed, rc=%d", client.state());
+    // TODO ?Sleep?
   }
 
-  client.connected();
+  while (!mqttClient.connected() && millis() < 10000) {
+    delay(50);
+  }
+}
+
+void onMqttConnect(bool sessionPresent) { DBG("Connected to MQTT\n"); }
+
+void onMqttPublish(uint16_t packetId) {
+  DBG("Publish acknowledged.\n");
+  DBG("  packetId: %d\n", packetId);
+  published = true;
 }
 
 void inline static beep() {
-  // ledcWrite(BUZZER_CHANNEL, ((uint32_t)pow(2, PWM_RESOLUTION) - 1) / 2);
-  ledcWriteTone(BUZZER_CHANNEL, 4000000L);
+  ledcWriteTone(BUZZER_CHANNEL, 4000L);
+  ledcWrite(BUZZER_CHANNEL, 120);
 
   // digitalWrite(BUZZER, HIGH);
   delay(42);
@@ -224,13 +203,17 @@ void static chirp(uint8_t times) {
 int16_t read_moisture() {
   int16_t _adc;
 
-  ledcWrite(PWM_CHANNEL, ((uint32_t)pow(2, PWM_RESOLUTION) - 1) / 2);
+  ledcWriteTone(PWM_CHANNEL, PWM_FREQUENCY);
+  ledcWrite(PWM_CHANNEL, 120);
 
-  delay(100);  // TODO test the time required to stabilize
+  DBG("PWM C SENSE\n");
+  delay(250);  // TODO test the time required to stabilize
 
-  _adc = analogRead(C_SENSE);
+  _adc = adc1_get_raw(ADC1_CHANNEL_5);
 
   ledcWrite(PWM_CHANNEL, 0);
+
+  DBG("Read ADC for capacitive sensor: %d\n", _adc);
 
   return _adc;
 }
@@ -247,132 +230,48 @@ void getInternetTime() {
   sprintf(iso8601date, "%d-%02d-%02dT%02d:%02d:%02d\n",
           (tmstruct.tm_year) + 1900, (tmstruct.tm_mon) + 1, tmstruct.tm_mday,
           tmstruct.tm_hour, tmstruct.tm_min, tmstruct.tm_sec);
-  DBG("\nNow is : %s\n", iso8601date);
-  /*
-  http_time.beginRequest();
-  // http://worldclockapi.com/api/json/cet/now
-  http_time.get("/api/json/cet/now");
-
-  // or get from home assistant
-  //String _bearer = "Bearer ";
-  //_bearer.concat(S_ha_token);
-  //http_time.sendHeader("Authorization", _bearer);
-
-  http_time.endRequest();
-
-  int statusCode = http_time.responseStatusCode();
-
-  DBG("GET Status code: %d\n", statusCode);
-
-  if (statusCode != 200)
-  {
-    //PROBLEM TODO
-    //sleep
-    return;
-  }
-
-  http_time.skipResponseHeaders();
-
-  String response = http_time.responseBody();
-
-  String search = "\"currentDateTime\":\"";
-  int _index = response.indexOf(search);
-
-  // "currentDateTime":"2020-11-22T22:34+01:00"
-  String _iso8601date =
-      response.substring(_index + search.length(),
-                         _index + search.length() + 16);
-
-  // RTC lib expect seconds, so insert 00 to avoid trouble <->
-  "2000-01-01T00:00:00" _iso8601date.toCharArray(iso8601date,
-  strlen(iso8601date) - 2); iso8601date[16] = ':'; iso8601date[17] = '0';
-  iso8601date[18] = '0';
-  DBG("time ISO from HTTP is %s\n", iso8601date);
-  */
-}
-
-void sendPost(bool dry, uint16_t battery, String payload) {
-  /*
-  curl -X POST -H "Authorization: Bearer ABCDEFGH" \
-    -H "Content-Type: application/json" \
-    -d '{"state": "25"}' \
-    http://localhost:8123/api/states/sensor.kitchen_temperature
-  */
-
-  String state = (dry) ? "on" : "off";  // "on" means moisture detected (wet),
-                                        // "off" means no moisture (dry)
-  // float batt = (float)battery / 1000.0;
-  /*
-  String postData = "{\"attributes\": {";
-  //postData += "\"altitude\": " + alt + ", ";
-  postData += "\"friendly_name\": \"" + (String)DEVICE_NAME + "\", ";
-  postData += "\"battery\": "         + String(batt, 2) + "}, ";
-  postData += "\"state\": \""         + state + "\"}";
-*/
-
-  String postData = "{\"state\": \"" + state + "\"}";
-
-  http_ha.beginRequest();
-  http_ha.post("/api/states/device_tracker.bike_test");
-  http_ha.sendHeader(HTTP_HEADER_CONTENT_TYPE, "application/json");
-  http_ha.sendHeader(HTTP_HEADER_CONTENT_LENGTH, postData.length());
-
-  // or get from home assistant
-  String _bearer = "Bearer ";
-  //_bearer.concat(S_ha_token);
-  http_ha.sendHeader("Authorization", _bearer);
-
-  http_ha.endRequest();
-  http_ha.print(postData);
-
-  int statusCode = http_ha.responseStatusCode();
-
-  DBG("GET Status code: %d\n", statusCode);
-
-  if (statusCode != 200) {
-    // PROBLEM TODO
-    // sleep
-    return;
-  }
+  DBG("Now is : %s\n", iso8601date);
 }
 
 void pinInit() {
-  pinMode(BATT_EN, OUTPUT_OPEN_DRAIN);
+  pinMode(BATT_EN, OUTPUT);
+  digitalWrite(BATT_EN, HIGH);
 
-  pinMode(PWM, OUTPUT);
-  ledcAttachPin(PWM, PWM_CHANNEL);
   ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
+  ledcAttachPin(PWM, PWM_CHANNEL);
 
-  pinMode(BUZZER, OUTPUT);
-  ledcAttachPin(BUZZER, BUZZER_CHANNEL);
   ledcSetup(BUZZER_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
-
-  pinMode(C_SENSE, INPUT);   // ADC -> not needed
-  pinMode(BATT_ADC, INPUT);  // ADC -> not needed
+  ledcAttachPin(BUZZER, BUZZER_CHANNEL);
 
   adc1_config_width(ADC_WIDTH_BIT_11);  // Reduce ADC resolution due to reported
                                         // noise on 12 bits
   adc1_config_channel_atten(
-      ADC1_CHANNEL_5, ADC_ATTEN_DB_11);  // -11dB attenuation (ADC_ATTEN_DB_11)
-                                         // gives full-scale voltage 3.6V
+      ADC1_CHANNEL_5, ADC_ATTEN_DB_11);  // 11dB attenuation (ADC_ATTEN_DB_11)
+                                         // gives full-scale voltage 3.5V
   adc1_config_channel_atten(
-      ADC1_CHANNEL_4, ADC_ATTEN_DB_11);  // -11dB attenuation (ADC_ATTEN_DB_11)
-                                         // gives full-scale voltage 3.6V
-
-  esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11, 1098,
-                           adc_chars);  // !! TODO calibrate Vref
-
-  analogSetCycles(8);   // default is 8 and seems OK
-  analogSetSamples(1);  // default is 1
+      ADC1_CHANNEL_4, ADC_ATTEN_DB_6);  // 6dB attenuation (ADC_ATTEN_DB_6)
+                                        // gives full-scale voltage 2.2V
+  /*
+    esp_adc_cal_characteristics_t *adc_chars = new
+    esp_adc_cal_characteristics_t; esp_adc_cal_characterize(ADC_UNIT_1,
+    ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11, 1098, adc_chars);  // !! TODO calibrate
+    Vref
+  */
 }
 
 uint16_t getBattmilliVcc() {
-  uint8_t raw;
   digitalWrite(BATT_EN, LOW);
-  delay(50);  // TODO
-  raw = analogRead(BATT_ADC);
-  return ((raw * 3600 / 2 ^ 11) * 2);
+
+  delay(100);  // TODO
+
+  uint16_t raw = adc1_get_raw(ADC1_CHANNEL_4);  // analogRead(BATT_ADC);
+  uint16_t battmilliVcc = (raw * 2200 / 2047 * 2);
+
+  DBG("Measure ADC Battery, raw: %d, %dmV\n", raw, battmilliVcc);
+
+  digitalWrite(BATT_EN, HIGH);
+
+  return battmilliVcc;
 }
 
 void rtc_init() {
@@ -381,7 +280,6 @@ void rtc_init() {
   Wire.begin(SDA_PIN, SCL_PIN, 100000L);
   if (!rtc.begin()) {
     DBG("Couldn't find RTC\n");
-    delay(100);
     // abort(); TODO
   }
 
@@ -396,12 +294,20 @@ void rtc_init() {
 
 void powerOff(DateTime now) {
   WiFi.disconnect(true);  // TODO check if false changes time
+                          /*
+                            if (now.hour() >= 18) {
+                              DBG("Set wake to 8AM\n");
+                              rtc.setAlarm(8, 00);
+                            } else {
+                              DBG("Set wake to 6PM\n");
+                              rtc.setAlarm(18, 00);
+                            }
+                          */
 
-  if (now.hour() >= 18) {
-    rtc.setAlarm(8, 00);
-  } else {
-    rtc.setAlarm(18, 00);
-  }
+  rtc.setAlarm(DateTime(now.unixtime() + 60), PCF8563_Alarm_Daily);
+
+  DBG("Clear alarm flag, disabling LDO\n");
+
   rtc.clearAlarm();
 }
 
@@ -468,11 +374,18 @@ void setup() {
 #endif
 
 #ifdef CALIBRATE
-  // Measure GPIO in order to determine Vref GPIO_NUM_12 == BUZZER -> R11
-  adc2_vref_to_gpio(GPIO_NUM_12);
+  // Measure GPIO in order to determine Vref to gpio 25 or 26 or 27
+  adc2_vref_to_gpio(GPIO_NUM_25);
   delay(5000);
   abort();
 #endif
+
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);  // disable brownout detector
+
+  pinInit();
+
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onPublish(onMqttPublish);
 
   if (!FFat.begin(true)) {
     DBG("FFat Mount Failed\n");
@@ -484,12 +397,12 @@ void setup() {
   rtc_init();
 
   DateTime now = rtc.now();
-  DBG("RTC date is: %d-%d-%dT%d:%d:%d", now.year(), now.month(), now.day(),
+  DBG("RTC date is: %d-%d-%dT%d:%d:%d\n", now.year(), now.month(), now.day(),
       now.hour(), now.minute(), now.second());
 
   if (rtc.lostPower() || now.dayOfTheWeek() == 0) {
     DBG("RTC is NOT initialized, let's set the time!\n");
-    DBG("OR is SUnday!\n");
+    DBG("OR is Sunday!\n");
     setup_wifi();
     getInternetTime();
     rtc.adjust(DateTime(iso8601date));
@@ -498,6 +411,8 @@ void setup() {
   if (!rtc.alarmFired())  // Interrupt from button, wait and confirm
   {
     chirp(2);
+    DBG("CFG Button pressed, wait 2 sec\n");
+
     // only wait for the button press if reaches here quickly
     // otherwise it'd indicates internet connection
     if (millis() < 1000) {
@@ -516,10 +431,14 @@ void setup() {
       rtc.setAlarm(18, 00);
       */
 
-      play(BUZZER_CHANNEL, Skala);
+      // play(BUZZER_CHANNEL, Skala);
 
       chirp(5);
       powerOff(now);
+
+      // if button is kept pressed, sleep
+      esp_sleep_enable_timer_wakeup(2000000L);  // TODO decide time
+      esp_deep_sleep_start();
     }
   }
 
@@ -527,39 +446,48 @@ void setup() {
   capSensorSense = read_moisture();
   uint16_t batt = getBattmilliVcc();
 
+  DBG("Threshold is %d\n", capSensorThrs);
+
   // high is dry
   if (capSensorSense > capSensorThrs) {
     setup_wifi();
 
     DBG("DRY\n");
 
-    play(BUZZER_CHANNEL, Urgent);
+    // play(BUZZER_CHANNEL, Urgent);
 
-    /*
     chirp(9);
     delay(350);
     chirp(1);
     delay(50);
     chirp(1);
-    */
 
     // Home Assistant -> on means moisture detected (wet), off means no moisture
     // (dry)
-    char topic[strlen("/states/binary_sensor.moisture") + strlen(DEVICE_NAME)];
-    sprintf(topic, "/states/binary_sensor.%s_moisture", DEVICE_NAME);
+    char topic[strlen("/states/binary_sensor._moisture") + strlen(DEVICE_NAME) +
+               1];
+    snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_moisture",
+             DEVICE_NAME);
 
     char payload[160];
-    sprintf(
-        payload,
+    snprintf(
+        payload, sizeof(payload),
         "{\"to\": \"%s\",\"state\": \"off\",\"attributes\": "
         "{\"friendly_name\": \"%s_moisture\",\"device_class\": \"moisture\"}}",
         TO, DEVICE_NAME);
 
-    client.publish(topic, payload);
-  } else if (batt < 2000) {
+    // client.publish(topic, payload);
+    mqttClient.publish(topic, 2, false, payload);
+
+    while (published == false && millis() < 10000L) {
+      delay(50);
+    }
+    published = false;
+  } else if (batt < 2200) {  // TODO https://data.energizer.com/PDFs/CR2_EU.pdf
+    DBG("Low battery\n");
+
     setup_wifi();
 
-    DBG("Low battery\n");
     chirp(9);
     delay(350);
     chirp(1);
@@ -567,37 +495,27 @@ void setup() {
     chirp(1);
 
     // Home Assistant -> on means low, off means normal
-    char topic[strlen("/states/binary_sensor.batt") + strlen(DEVICE_NAME)];
-    sprintf(topic, "/states/binary_sensor.%s_batt", DEVICE_NAME);
+    char topic[strlen("/states/binary_sensor._batt") + strlen(DEVICE_NAME) + 1];
+    snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_batt",
+             DEVICE_NAME);
 
-    char payload[160];
-    sprintf(payload,
-            "{\"to\": \"%s\",\"state\": \"on\",\"attributes\": "
-            "{\"friendly_name\": \"%s_batt\",\"device_class\": \"battery\"}}",
-            TO, DEVICE_NAME);
+    char payload[160] = "";
+    snprintf(payload, sizeof(payload),
+             "{\"to\": \"%s\",\"state\": \"on\",\"attributes\": "
+             "{\"friendly_name\": \"%s_batt\",\"device_class\": \"battery\"}}",
+             TO, DEVICE_NAME);
 
-    client.publish(topic, payload);
+    // client.publish(topic, payload);
+    mqttClient.publish(topic, 2, false, payload);
+
+    while (published == false && millis() < 10000L) {
+      delay(50);
+    }
   }
 
   powerOff(now);
 
-  // client.setServer(mqtt_server, mqtt_port);
-  // client.setCallback(callback);
-
-  DBG("Should never get here+\n");
+  DBG("Should never get here\n");
 }
 
-void loop() {
-  /*
-  if (!client.connected())
-  {
-    temp_reader.detach();
-    mqtt_rc.once_ms(MQTT_RC_TIMEOUT, reconnect);
-  }
-  else
-  {
-    //temp_reader.attach(TEMP_TIMEOUT, read_temp);
-    client.loop();
-  }
-  */
-}
+void loop() {}
