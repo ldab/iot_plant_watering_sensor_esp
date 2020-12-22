@@ -522,4 +522,8 @@ void setup() {
   DBG("Should never get here\n");
 }
 
-void loop() {}
+void loop() {
+  DateTime now = rtc.now();
+  powerOff(now);
+  abort();
+}
