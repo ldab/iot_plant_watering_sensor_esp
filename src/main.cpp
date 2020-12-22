@@ -408,6 +408,8 @@ void setup() {
     setup_wifi();
     getInternetTime();
     rtc.adjust(DateTime(iso8601date));
+
+    now = rtc.now();
   }
 
   if (!rtc.alarmFired())  // Interrupt from button, wait and confirm
