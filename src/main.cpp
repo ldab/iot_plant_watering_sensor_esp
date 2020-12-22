@@ -262,11 +262,13 @@ void pinInit() {
 uint16_t getBattmilliVcc() {
   digitalWrite(BATT_EN, LOW);
 
-  delay(100);  // TODO
+  esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11, 1098,
+                           adc_chars);
 
-  uint16_t raw = adc1_get_raw(ADC1_CHANNEL_4);  // analogRead(BATT_ADC);
-  uint16_t battmilliVcc = (raw * 2200 / 2047 * 2);
-
+  uint32_t raw = adc1_get_raw(ADC1_CHANNEL_4);  // analogRead(BATT_ADC);
+  uint32_t battmilliVcc = esp_adc_cal_raw_to_voltage(raw, adc_chars) * 2;
+  
   DBG("Measure ADC Battery, raw: %d, %dmV\n", raw, battmilliVcc);
 
   digitalWrite(BATT_EN, HIGH);
