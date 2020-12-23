@@ -143,7 +143,7 @@ void setup_wifi() {
   {
     int8_t wifi_result = WiFi.waitForConnectResult();
     if (wifi_result == WL_CONNECTED) break;
-    DBG(" WiFi connect failed: %d\n", wifi_result);
+    DBG(".");
   }
   if (WiFi.status() == WL_CONNECTED) {
     randomSeed(micros());
@@ -155,6 +155,7 @@ void setup_wifi() {
     DBG("Connecting to MQTT Server %s\n", mqtt_server);
     mqttClient.connect();
   } else {
+    DBG(" WiFi connect failed: %d\n", WiFi.status());
     // TODO ?Sleep?
   }
 
@@ -206,8 +207,7 @@ int16_t read_moisture() {
   ledcWriteTone(PWM_CHANNEL, PWM_FREQUENCY);
   ledcWrite(PWM_CHANNEL, 120);
 
-  DBG("PWM C SENSE\n");
-  delay(250);  // TODO test the time required to stabilize
+  delay(600);  // RC -> 510K x 1u = 0.51sec
 
   _adc = adc1_get_raw(ADC1_CHANNEL_5);
 
@@ -230,7 +230,7 @@ void getInternetTime() {
   sprintf(iso8601date, "%d-%02d-%02dT%02d:%02d:%02d\n",
           (tmstruct.tm_year) + 1900, (tmstruct.tm_mon) + 1, tmstruct.tm_mday,
           tmstruct.tm_hour, tmstruct.tm_min, tmstruct.tm_sec);
-  DBG("Now is : %s\n", iso8601date);
+  DBG("NTP time : %s\n", iso8601date);
 }
 
 void pinInit() {
@@ -268,7 +268,7 @@ uint16_t getBattmilliVcc() {
 
   uint32_t raw = adc1_get_raw(ADC1_CHANNEL_4);  // analogRead(BATT_ADC);
   uint32_t battmilliVcc = esp_adc_cal_raw_to_voltage(raw, adc_chars) * 2;
-  
+
   DBG("Measure ADC Battery, raw: %d, %dmV\n", raw, battmilliVcc);
 
   digitalWrite(BATT_EN, HIGH);
@@ -466,8 +466,7 @@ void setup() {
     delay(50);
     chirp(1);
 
-    // Home Assistant -> on means moisture detected (wet), off means no moisture
-    // (dry)
+    // HA-> on means moisture detected (wet), off means no moisture (dry)
     char topic[strlen("/states/binary_sensor._moisture") + strlen(DEVICE_NAME) +
                1];
     snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_moisture",
