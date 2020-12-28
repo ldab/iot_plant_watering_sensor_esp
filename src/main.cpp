@@ -55,7 +55,6 @@ Distributed as-is; no warranty is given.
 #define PWM_CHANNEL 0
 #define BUZZER_CHANNEL 1
 #define PWM_FREQUENCY 1000000L  // 1MHz
-#define PWM_RESOLUTION 8        // bits
 
 // Update these with values suitable for your network.
 const char *wifi_ssid = s_wifi_ssid;
