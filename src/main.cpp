@@ -173,14 +173,12 @@ void onMqttPublish(uint16_t packetId) {
 }
 
 void inline static beep() {
-  ledcWriteTone(BUZZER_CHANNEL, 4000L);
-  ledcWrite(BUZZER_CHANNEL, 120);
+  ledcWriteTone(BUZZER_CHANNEL,
+                4000L);  // Set res to 10 bits and call ledcWrite();
 
-  // digitalWrite(BUZZER, HIGH);
   delay(42);
-  // digitalWrite(BUZZER, LOW);
 
-  ledcWrite(BUZZER_CHANNEL, 0);
+  ledcWriteTone(BUZZER_CHANNEL, 0);
 }
 
 void static chirp(uint8_t times) {
@@ -204,12 +202,10 @@ void static chirp(uint8_t times) {
 int16_t read_moisture() {
   int16_t _adc;
 
-  ledcWriteTone(PWM_CHANNEL, PWM_FREQUENCY);
-  ledcWrite(PWM_CHANNEL, 120);
+  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, 1);
+  ledcWrite(PWM_CHANNEL, 1);
 
   delay(600);  // RC -> 510K x 1u = 0.51sec
-
-  _adc = adc1_get_raw(ADC1_CHANNEL_5);
 
   ledcWrite(PWM_CHANNEL, 0);
 
@@ -237,10 +233,8 @@ void pinInit() {
   pinMode(BATT_EN, OUTPUT);
   digitalWrite(BATT_EN, HIGH);
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
   ledcAttachPin(PWM, PWM_CHANNEL);
 
-  ledcSetup(BUZZER_CHANNEL, PWM_FREQUENCY, PWM_RESOLUTION);
   ledcAttachPin(BUZZER, BUZZER_CHANNEL);
 
   adc1_config_width(ADC_WIDTH_BIT_11);  // Reduce ADC resolution due to reported
