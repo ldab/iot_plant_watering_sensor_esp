@@ -90,7 +90,7 @@ int16_t capSensorSense = -1;
 char iso8601date[] = "2000-01-01T00:00:00";
 
 void WiFiEvent(WiFiEvent_t event) {
-  DBG("[WiFi-event] event: %d\n", event);
+  // DBG("[WiFi-event] event: %d\n", event);
 
   switch (event) {
     case SYSTEM_EVENT_STA_CONNECTED:
@@ -168,7 +168,6 @@ void onMqttConnect(bool sessionPresent) { DBG("Connected to MQTT\n"); }
 
 void onMqttPublish(uint16_t packetId) {
   DBG("Publish acknowledged.\n");
-  DBG("  packetId: %d\n", packetId);
   published = true;
 }
 
@@ -366,7 +365,6 @@ void writeThreshold(int16_t _t) {
 void setup() {
 #ifdef VERBOSE
   Serial.begin(115200);
-  while (!Serial) delay(1);  // wait for Serial on Leonardo/Zero, etc
 #endif
 
 #ifdef CALIBRATE
