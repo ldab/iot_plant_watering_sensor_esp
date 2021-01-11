@@ -378,7 +378,13 @@ void setup() {
 
   if (!FFat.begin(true)) {
     DBG("FFat Mount Failed\n");
-    return;  // TODO
+    chirp(1);
+    delay(100);
+    chirp(1);
+    delay(100);
+    chirp(1);
+    delay(100);
+    // send_error("FFat mount"); TODO
   }
   DBG("Total space: %10u\n", FFat.totalBytes());
   DBG("Free space: %10u\n", FFat.freeBytes());
@@ -436,7 +442,30 @@ void setup() {
   uint16_t batt = getBattmilliVcc();
   capSensorThrs = readThreshold();
   capSensorSense = read_moisture();
-  uint16_t batt = getBattmilliVcc();
+
+#ifdef VERBOSE
+  setup_wifi();
+
+  uint8_t reset_reason = esp_reset_reason();
+
+  char p[160];
+  snprintf(
+      p, sizeof(p),
+      "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": %s, \"rssi\": %d, "
+      "\"reset\": %d}",
+      batt, capSensorSense, capSensorThrs, now.toString(iso8601date),
+      WiFi.RSSI(), reset_reason);
+
+  char topic[strlen("/states/binary_sensor._debug") + strlen(DEVICE_NAME) + 1];
+  snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_debug", DEVICE_NAME);
+
+  mqttClient.publish(topic, 2, false, p);
+
+  while (published == false && millis() < 10000L) {
+    delay(50);
+  }
+  published = false;
+#endif
 
   DBG("Threshold is %d\n", capSensorThrs);
 
