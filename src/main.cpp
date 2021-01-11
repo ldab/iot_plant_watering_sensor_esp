@@ -14,10 +14,10 @@ Distributed as-is; no warranty is given.
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
 
-#include "ArduinoHttpClient.h"
 #include "AsyncMqttClient.h"
 #include "FFat.h"
 #include "FS.h"
+#include <HTTPUpdate.h>
 #include "RTClib.h"
 #include "RTTTL.h"
 #include "secrets.h"
@@ -185,7 +185,6 @@ void send_error(String problem) {
            "\"problem\",\"problem_string\": \"%s\"}}",
            TO, DEVICE_NAME, problem.c_str());
 
-  // client.publish(topic, payload);
   mqttClient.publish(topic, 2, false, payload);
 }
 
@@ -372,6 +371,27 @@ void writeThreshold(int16_t _t) {
     DBG("Write failed\n");
   }
   file.close();
+}
+
+void OTA_update() {
+  t_httpUpdate_return ret =
+      httpUpdate.update(espClient, "http://server/file.bin");
+
+  switch (ret) {
+    case HTTP_UPDATE_FAILED:
+      DBG("HTTP_UPDATE_FAILED Error (%d): %s\n",
+                    httpUpdate.getLastError(),
+                    httpUpdate.getLastErrorString().c_str());
+      break;
+
+    case HTTP_UPDATE_NO_UPDATES:
+      DBG("HTTP_UPDATE_NO_UPDATES\n");
+      break;
+
+    case HTTP_UPDATE_OK:
+      DBG("HTTP_UPDATE_OK\n");
+      break;
+  }
 }
 
 void setup() {
