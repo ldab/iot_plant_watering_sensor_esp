@@ -18,9 +18,6 @@ Distributed as-is; no warranty is given.
 #include "AsyncMqttClient.h"
 #include "FFat.h"
 #include "FS.h"
-#include "soc/rtc_cntl_reg.h"  //disable brownout problems
-#include "soc/soc.h"           //disable brownout problems
-//#include "PubSubClient.h"
 #include "RTClib.h"
 #include "RTTTL.h"
 #include "secrets.h"
@@ -40,11 +37,7 @@ Distributed as-is; no warranty is given.
 #define DBG(...)
 #endif
 
-// MQTT reconnection timeout in ms
-#define MQTT_RC_TIMEOUT 5000
-
-// Temperature reading timer in seconds
-#define TEMP_TIMEOUT 1
+#define VREF_CALIB 1098  // #define CALIBRATE and measure Vref
 
 #define C_SENSE A5   // GPIO33 - IO33/ADC1_CH5
 #define BATT_ADC A4  // GPIO32 - IO32/ADC1_CH4
@@ -57,6 +50,7 @@ Distributed as-is; no warranty is given.
 #define PWM_CHANNEL 0
 #define BUZZER_CHANNEL 1
 #define PWM_FREQUENCY 1000000L  // 1MHz
+#define BUZZER_FREQ 4000L
 
 // Update these with values suitable for your network.
 const char *wifi_ssid = s_wifi_ssid;
@@ -79,7 +73,6 @@ uint16_t mqtt_port = s_mqtt_port;
 
 // initialize the MQTT Client
 WiFiClient espClient;
-// PubSubClient client(espClient);
 AsyncMqttClient mqttClient;
 bool published = false;
 
@@ -89,6 +82,8 @@ RTC_PCF8563 rtc;
 int16_t capSensorThrs = -1;
 int16_t capSensorSense = -1;
 char iso8601date[] = "2000-01-01T00:00:00";
+
+void static chirp(uint8_t times);
 
 void WiFiEvent(WiFiEvent_t event) {
   // DBG("[WiFi-event] event: %d\n", event);
@@ -148,7 +143,6 @@ void setup_wifi() {
   }
   if (WiFi.status() == WL_CONNECTED) {
     randomSeed(micros());
-    DBG(" WiFi connected\n");
 
     mqttClient.setServer(mqtt_server, mqtt_port);
     mqttClient.setCredentials(mqtt_user, mqtt_pass);
@@ -180,7 +174,7 @@ void onMqttPublish(uint16_t packetId) {
 
 void inline static beep() {
   ledcWriteTone(BUZZER_CHANNEL,
-                4000L);  // Set res to 10 bits and call ledcWrite();
+                BUZZER_FREQ);  // Set res to 10 bits and call ledcWrite();
 
   delay(42);
 
@@ -189,7 +183,7 @@ void inline static beep() {
 
 void static chirp(uint8_t times) {
   /* TODO
-    // radio off to save power
+  // radio off to save power
   btStop();
   WiFi.mode( WIFI_OFF );
 
@@ -208,14 +202,21 @@ void static chirp(uint8_t times) {
 int16_t read_moisture() {
   int16_t _adc;
 
-  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, 1);
+  ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, 1);  // ADC res depends on freq, 1b@50%
   ledcWrite(PWM_CHANNEL, 1);
 
   delay(600);  // RC -> 510K x 1u = 0.51sec
 
   ledcWrite(PWM_CHANNEL, 0);
 
-  DBG("Read ADC for capacitive sensor: %d\n", _adc);
+  esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11,
+                           VREF_CALIB, adc_chars);
+
+  _adc = adc1_get_raw(ADC1_CHANNEL_5);
+  uint32_t cap_milli = esp_adc_cal_raw_to_voltage(_adc, adc_chars);
+
+  DBG("Read ADC for capacitive sensor: %d or %dmV\n", _adc, cap_milli);
 
   return _adc;
 }
@@ -228,7 +229,7 @@ void getInternetTime() {
              "0.pool.ntp.org", "1.pool.ntp.org");
   struct tm tmstruct;
   tmstruct.tm_year = 0;
-  getLocalTime(&tmstruct, 5000);  // TODO timeout
+  getLocalTime(&tmstruct, 2000);
   sprintf(iso8601date, "%d-%02d-%02dT%02d:%02d:%02d\n",
           (tmstruct.tm_year) + 1900, (tmstruct.tm_mon) + 1, tmstruct.tm_mday,
           tmstruct.tm_hour, tmstruct.tm_min, tmstruct.tm_sec);
@@ -263,8 +264,8 @@ uint16_t getBattmilliVcc() {
   digitalWrite(BATT_EN, LOW);
 
   esp_adc_cal_characteristics_t *adc_chars = new esp_adc_cal_characteristics_t;
-  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11, 1098,
-                           adc_chars);
+  esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11,
+                           VREF_CALIB, adc_chars);
 
   uint32_t raw = adc1_get_raw(ADC1_CHANNEL_4);  // analogRead(BATT_ADC);
   uint32_t battmilliVcc = esp_adc_cal_raw_to_voltage(raw, adc_chars) * 2;
@@ -282,7 +283,8 @@ void rtc_init() {
   Wire.begin(SDA_PIN, SCL_PIN, 100000L);
   if (!rtc.begin()) {
     DBG("Couldn't find RTC\n");
-    // abort(); TODO
+    chirp(3);
+    // send_error("RTC"); TODO
   }
 
   // Disable CLKOUT @ 200nA vs 550nA when active
@@ -321,6 +323,7 @@ int16_t readThreshold(void) {
   File file = FFat.open(path);
   if (!file || file.isDirectory()) {
     DBG("- failed to open file for reading\n");
+    // send_error("FFAT read"); TODO
     return -2;
   }
 
@@ -341,24 +344,15 @@ int16_t readThreshold(void) {
   return atoi(t);
 }
 
-void deleteFile(const char *path) {
-  DBG("Deleting file: %s\n", path);
-  if (FFat.remove(path)) {
-    DBG("File deleted\n");
-  } else {
-    DBG("Delete failed\n");
-  }
-}
-
 void writeThreshold(int16_t _t) {
   const char *path = "/threshold.txt";
 
-  // deleteFile(path); // not needed
   DBG("Writing file: %s\n", path);
 
   File file = FFat.open(path, FILE_WRITE);
   if (!file) {
     DBG("Failed to open file for writing\n");
+    // send_error("FFAT write"); TODO
     return;
   }
   if (file.print(_t)) {
@@ -419,7 +413,7 @@ void setup() {
     // only wait for the button press if reaches here quickly
     // otherwise it'd indicates internet connection
     if (millis() < 1000) {
-      esp_sleep_enable_timer_wakeup(2000000L);  // TODO decide time
+      esp_sleep_enable_timer_wakeup(2000000L);
       esp_light_sleep_start();
     }
 
@@ -428,23 +422,24 @@ void setup() {
       chirp(2);
       capSensorSense = read_moisture();
       writeThreshold(capSensorSense);
-      /* TODO, check time when button is pressed
+
+      setup_wifi();
       getInternetTime();
       rtc.adjust(DateTime(iso8601date));
-      rtc.setAlarm(18, 00);
-      */
+      now = rtc.now();
 
-      // play(BUZZER_CHANNEL, Skala);
+      // play(BUZZER_CHANNEL, Skala); TODO
 
       chirp(5);
       powerOff(now);
 
       // if button is kept pressed, sleep
-      esp_sleep_enable_timer_wakeup(2000000L);  // TODO decide time
+      esp_sleep_enable_timer_wakeup(2000000L);
       esp_deep_sleep_start();
     }
   }
 
+  uint16_t batt = getBattmilliVcc();
   capSensorThrs = readThreshold();
   capSensorSense = read_moisture();
   uint16_t batt = getBattmilliVcc();
@@ -478,21 +473,20 @@ void setup() {
         "{\"friendly_name\": \"%s_moisture\",\"device_class\": \"moisture\"}}",
         TO, DEVICE_NAME);
 
-    // client.publish(topic, payload);
     mqttClient.publish(topic, 2, false, payload);
 
     while (published == false && millis() < 10000L) {
       delay(50);
     }
     published = false;
-  } else if (batt < 2200) {  // TODO https://data.energizer.com/PDFs/CR2_EU.pdf
+  } else if (batt < 2200) {  // https://data.energizer.com/PDFs/CR2_EU.pdf
     DBG("Low battery\n");
 
     setup_wifi();
 
-    chirp(9);
+    chirp(3);
     delay(350);
-    chirp(1);
+    chirp(2);
     delay(50);
     chirp(1);
 
@@ -507,7 +501,6 @@ void setup() {
              "{\"friendly_name\": \"%s_batt\",\"device_class\": \"battery\"}}",
              TO, DEVICE_NAME);
 
-    // client.publish(topic, payload);
     mqttClient.publish(topic, 2, false, payload);
 
     while (published == false && millis() < 10000L) {
@@ -523,5 +516,6 @@ void setup() {
 void loop() {
   DateTime now = rtc.now();
   powerOff(now);
-  abort();
+  // abort();
+  esp_deep_sleep(120000000L);
 }
