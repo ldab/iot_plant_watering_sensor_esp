@@ -118,6 +118,22 @@ main()
 
 ## Power Profile
 
+* The DHCP negotiation and IP assignment can take a long time depending on the router, the below example is from a fairly long avg 90mA@2.8V for 3 s -> Includes ADC reading and MQTT publish
+
+<img src="./pics/active_current.png" width="50%"> 
+
+* When not connecting to WiFi, it is a lot faster:
+
+<img src="./pics/active_current_noWiFi.png" width="50%"> 
+
+* And during sleep 6uA@2.8V maninly due to the battery ADC (VCC/1MOhm =~ 3uA) and Boost disabled, ~1uA
+
+<img src="./pics/sleep_current.png" width="50%"> 
+
+* Primary battery CR-2 drops a bit during active, 280mv:
+
+<img src="./pics/v_drop_cr_2.png" width="50%"> 
+
 ## Calibrating ADC for ESP32
 
 * ADC on ESP32 has been reported being innacurate, therefore one can use ```adc2_vref_to_gpio( GPIO_NUM_25 );``` to route `Vref` to `GPIO_NUM_25` that can be measured over `ESP32 pin 10` in order to calibrate during ADC measurement.
