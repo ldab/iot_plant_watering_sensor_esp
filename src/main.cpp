@@ -155,11 +155,17 @@ void setup_wifi() {
     mqttClient.connect();
   } else {
     DBG(" WiFi connect failed: %d\n", WiFi.status());
-    // TODO ?Sleep?
+    chirp(5);
+    esp_deep_sleep(360000000L);
   }
 
-  while (!mqttClient.connected() && millis() < 10000) {
+  while (!mqttClient.connected() && millis() < 5000) {
     delay(50);
+  }
+  if (!mqttClient.connected()) {
+    DBG(" MQTT connect failed: %d\n", WiFi.status());
+    chirp(3);
+    esp_deep_sleep(360000000L);
   }
 }
 
