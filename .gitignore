@@ -1,32 +1,38 @@
-# Prerequisites
-*.d
+.pio
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch
+.vscode/extensions.json
+.vscode/settings.json
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+include/secrets.h
+# For PCBs designed using KiCad: http://www.kicad-pcb.org/
+# Format documentation: http://kicad-pcb.org/help/file-formats/
 
-# Precompiled Headers
-*.gch
-*.pch
+# Temporary files
+*.000
+*.bak
+*.bck
+*.kicad_pcb-bak
+*.kicad_sch-bak
+*.kicad_prl
+*.sch-bak
+*~
+_autosave-*
+*.tmp
+*-save.pro
+*-save.kicad_pcb
+fp-info-cache
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# Netlist files (exported from Eeschema)
+*.net
 
-# Fortran module files
-*.mod
-*.smod
+# Autorouter files (exported from Pcbnew)
+*.dsn
+*.ses
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+# Exported BOM files
+*.xml
+PCB/iot_plant_watering_sensor_esp32/iot_plant_watering_sensor_esp32-cache.lib
+PCB/iot_plant_watering_sensor_esp32/fp-lib-table
