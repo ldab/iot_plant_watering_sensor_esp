@@ -252,12 +252,6 @@ void pinInit() {
   adc1_config_channel_atten(
       ADC1_CHANNEL_4, ADC_ATTEN_DB_6);  // 6dB attenuation (ADC_ATTEN_DB_6)
                                         // gives full-scale voltage 2.2V
-  /*
-    esp_adc_cal_characteristics_t *adc_chars = new
-    esp_adc_cal_characteristics_t; esp_adc_cal_characterize(ADC_UNIT_1,
-    ADC_ATTEN_DB_11, ADC_WIDTH_BIT_11, 1098, adc_chars);  // !! TODO calibrate
-    Vref
-  */
 }
 
 uint16_t getBattmilliVcc() {
@@ -298,17 +292,17 @@ void rtc_init() {
 
 void powerOff(DateTime now) {
   WiFi.disconnect(true);  // TODO check if false changes time
-                          /*
-                            if (now.hour() >= 18) {
-                              DBG("Set wake to 8AM\n");
-                              rtc.setAlarm(8, 00);
-                            } else {
-                              DBG("Set wake to 6PM\n");
-                              rtc.setAlarm(18, 00);
-                            }
-                          */
 
-  rtc.setAlarm(DateTime(now.unixtime() + 60), PCF8563_Alarm_Daily);
+  DBG("Now is : %d/%d/%dT%d:%d\n", now.year(), now.month(), now.day(),
+      now.hour(), now.minute());
+
+  if (now.hour() >= 18) {
+    DBG("Set wake to 8AM\n");
+    rtc.setAlarm(8, 00);
+  } else {
+    DBG("Set wake to 6PM\n");
+    rtc.setAlarm(18, 00);
+  }
 
   DBG("Clear alarm flag, disabling LDO\n");
 
