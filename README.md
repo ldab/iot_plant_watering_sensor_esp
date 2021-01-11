@@ -10,8 +10,12 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
  ## TODO
 
 - [ ] Better battery polarity indication and reverse polarity protection;
+- [ ] Fix R16 - R19 Silk
+- [ ] R15 is leaking 200uA
 - [ ] Check if `esp_light_sleep_start()` improves current vs `delay(x)`
 - [ ] Inspect connection time if BSSID is saved vs Saving time
+- [ ] FOTA
+- [ ] Error reporting and callbacks, i.e FFAT, ADC read, etc..
 
 ## VOID
 
@@ -40,7 +44,7 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 
 ![](/pics/R_graph.png)
 
-[Wolfram Alpha - R Graph](https://www.wolframalpha.com/input/?i=plot+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*50*10%5E-12%29%29%29+-+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*200*10%5E-12%29%29%29%2C+R%3D+100+to+15000)¨
+[Wolfram Alpha - R Graph](https://www.wolframalpha.com/input/?i=plot+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*50*10%5E-12%29%29%29+-+3+*+%281+-+e%5E%28-500*10%5E-9%2F%28R*200*10%5E-12%29%29%29%2C+R%3D+100+to+15000)
 
 * From the graph below we go with 5KΩ, the capacitance of the probe varies from 50pF to 200pF:
 
@@ -49,6 +53,16 @@ Connected, IoT, WiFi capacitance plant watering sensor based on ESP32
 [Wolfram Alpha - C Graph](https://www.wolframalpha.com/input/?i=plot+3+*+%281+-+e%5E%28-500*10%5E-9%2F%285000*C%29%29%29%2C+C%3D50*10%5E-12+to+200*10%5E-12)
 
 * With a voltage range of 2.6 to 1.2 **~1.4V**.
+
+## Capacitive sensor measurement
+
+* When in the air, the sensor measures ~2.67V @ 1666(adc)
+
+![](/pics/c_sense_pwm (5).BMP)
+
+* And below 1000 (adc) ~1.8V when wet soil/water
+
+![](/pics/c_sense_pwm (3).BMP)
 
 ## PSEUDO-CODE
 
@@ -106,7 +120,7 @@ main()
 
 ## Calibrating ADC for ESP32
 
-* ADC on ESP32 has been reported being innacurate, therefore one can use ```adc2_vref_to_gpio( GPIO_NUM_12 );``` to route `Vref` to `GPIO_NUM_12` that can be measured over `BUZZER -> R11` in order to calibrate during ADC measurement.
+* ADC on ESP32 has been reported being innacurate, therefore one can use ```adc2_vref_to_gpio( GPIO_NUM_25 );``` to route `Vref` to `GPIO_NUM_25` that can be measured over `ESP32 pin 10` in order to calibrate during ADC measurement.
 * Calling for `esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_6, ADC_WIDTH_BIT_11, Vref, adc_chars);`
 
 https://docs.espressif.com/projects/esp-idf/zh_CN/latest/esp32/api-reference/peripherals/adc.html
