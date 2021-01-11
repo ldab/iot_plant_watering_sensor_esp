@@ -205,7 +205,7 @@ int16_t read_moisture() {
   ledcSetup(PWM_CHANNEL, PWM_FREQUENCY, 1);  // ADC res depends on freq, 1b@50%
   ledcWrite(PWM_CHANNEL, 1);
 
-  delay(600);  // RC -> 510K x 1u = 0.51sec
+  delay(250);  // 50ms is probably enough, play safe, check pics
 
   ledcWrite(PWM_CHANNEL, 0);
 
