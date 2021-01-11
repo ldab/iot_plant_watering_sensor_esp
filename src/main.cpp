@@ -8,6 +8,7 @@ Distributed as-is; no warranty is given.
 ******************************************************************************/
 
 #include <Arduino.h>
+#include <HTTPUpdate.h>
 #include <Ticker.h>
 #include <WiFi.h>
 #include <Wire.h>
@@ -16,8 +17,6 @@ Distributed as-is; no warranty is given.
 
 #include "AsyncMqttClient.h"
 #include "FFat.h"
-#include "FS.h"
-#include <HTTPUpdate.h>
 #include "RTClib.h"
 #include "RTTTL.h"
 #include "secrets.h"
@@ -379,9 +378,8 @@ void OTA_update() {
 
   switch (ret) {
     case HTTP_UPDATE_FAILED:
-      DBG("HTTP_UPDATE_FAILED Error (%d): %s\n",
-                    httpUpdate.getLastError(),
-                    httpUpdate.getLastErrorString().c_str());
+      DBG("HTTP_UPDATE_FAILED Error (%d): %s\n", httpUpdate.getLastError(),
+          httpUpdate.getLastErrorString().c_str());
       break;
 
     case HTTP_UPDATE_NO_UPDATES:
