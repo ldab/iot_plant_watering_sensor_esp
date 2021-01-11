@@ -172,6 +172,23 @@ void onMqttPublish(uint16_t packetId) {
   published = true;
 }
 
+void send_error(String problem) {
+  char
+      topic[strlen("/states/binary_sensor._problem") + strlen(DEVICE_NAME) + 1];
+  snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_problem",
+           DEVICE_NAME);
+
+  char payload[160];
+  snprintf(payload, sizeof(payload),
+           "{\"to\": \"%s\",\"state\": \"on\",\"attributes\": "
+           "{\"friendly_name\": \"%s_problem\",\"device_class\": "
+           "\"problem\",\"problem_string\": \"%s\"}}",
+           TO, DEVICE_NAME, problem.c_str());
+
+  // client.publish(topic, payload);
+  mqttClient.publish(topic, 2, false, payload);
+}
+
 void inline static beep() {
   ledcWriteTone(BUZZER_CHANNEL,
                 BUZZER_FREQ);  // Set res to 10 bits and call ledcWrite();
