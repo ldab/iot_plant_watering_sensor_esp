@@ -24,6 +24,8 @@ Distributed as-is; no warranty is given.
 #include "RTClib.h"
 #include "RTTTL.h"
 #include "secrets.h"
+#include "soc/rtc_cntl_reg.h"  //disable brownout
+#include "soc/soc.h"           //disable brownout
 
 #ifndef DEVICE_NAME
 #error Remember to define the Device Name
