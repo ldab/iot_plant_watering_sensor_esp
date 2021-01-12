@@ -464,10 +464,10 @@ void setup() {
   uint8_t reset_reason = esp_reset_reason();
 
   char p[160];
-  snprintf(
-      p, sizeof(p),
-      "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": %s, \"rssi\": %d, "
-      "\"reset\": %d}",
+  snprintf(p, sizeof(p),
+           "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": \"%s\", "
+           "\"rssi\": %d, "
+           "\"reset\": %d}",
       batt, capSensorSense, capSensorThrs, now.toString(iso8601date),
       WiFi.RSSI(), reset_reason);
 
