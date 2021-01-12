@@ -468,8 +468,8 @@ void setup() {
            "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": \"%s\", "
            "\"rssi\": %d, "
            "\"reset\": %d}",
-      batt, capSensorSense, capSensorThrs, now.toString(iso8601date),
-      WiFi.RSSI(), reset_reason);
+           batt, capSensorSense, capSensorThrs, now.timestamp().c_str(),
+           WiFi.RSSI(), reset_reason);
 
   char topic[strlen("/states/binary_sensor._debug") + strlen(DEVICE_NAME) + 1];
   snprintf(topic, sizeof(topic), "/states/binary_sensor.%s_debug", DEVICE_NAME);
