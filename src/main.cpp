@@ -150,16 +150,16 @@ void setup_wifi() {
     mqttClient.connect();
   } else {
     DBG(" WiFi connect failed: %d\n", WiFi.status());
-    chirp(5);
+    play(BUZZER_CHANNEL, Urgent, sizeof(Urgent) / sizeof(char *));
     esp_deep_sleep(360000000L);
   }
 
-  while (!mqttClient.connected() && millis() < 5000) {
+  while (!mqttClient.connected() && millis() < 10000) {
     delay(50);
   }
   if (!mqttClient.connected()) {
     DBG(" MQTT connect failed: %d\n", WiFi.status());
-    chirp(3);
+    play(BUZZER_CHANNEL, Urgent, sizeof(Urgent) / sizeof(char *));
     esp_deep_sleep(360000000L);
   }
 }
@@ -463,14 +463,13 @@ void setup() {
       rtc.adjust(DateTime(iso8601date));
       now = rtc.now();
 
-      // play(BUZZER_CHANNEL, Skala); TODO
-
-      chirp(5);
+      play(BUZZER_CHANNEL, Skala, sizeof(Skala) / sizeof(char *));
       powerOff(now);
 
       // if button is kept pressed, sleep
       esp_sleep_enable_timer_wakeup(2000000L);
-      esp_deep_sleep_start();
+      esp_light_sleep_start();
+      // esp_deep_sleep_start();
     }
   }
 
@@ -484,10 +483,10 @@ void setup() {
   uint8_t reset_reason = esp_reset_reason();
 
   char p[160];
-  snprintf(
-      p, sizeof(p),
-      "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": %s, \"rssi\": %d, "
-      "\"reset\": %d}",
+  snprintf(p, sizeof(p),
+           "{\"batt\": %d, \"adc\": %d, \"thr\": %d, \"time\": \"%s\", "
+           "\"rssi\": %d, "
+           "\"reset\": %d}",
       batt, capSensorSense, capSensorThrs, now.toString(iso8601date),
       WiFi.RSSI(), reset_reason);
 
