@@ -14,7 +14,6 @@ Distributed as-is; no warranty is given.
 #include <driver/adc.h>
 #include <esp_adc_cal.h>
 
-#include "ArduinoHttpClient.h"
 #include "AsyncMqttClient.h"
 #include "FFat.h"
 #include "FS.h"
@@ -151,16 +150,16 @@ void setup_wifi() {
     mqttClient.connect();
   } else {
     DBG(" WiFi connect failed: %d\n", WiFi.status());
-    chirp(5);
+    play(BUZZER_CHANNEL, Urgent, sizeof(Urgent) / sizeof(char *));
     esp_deep_sleep(360000000L);
   }
 
-  while (!mqttClient.connected() && millis() < 5000) {
+  while (!mqttClient.connected() && millis() < 10000) {
     delay(50);
   }
   if (!mqttClient.connected()) {
     DBG(" MQTT connect failed: %d\n", WiFi.status());
-    chirp(3);
+    play(BUZZER_CHANNEL, Urgent, sizeof(Urgent) / sizeof(char *));
     esp_deep_sleep(360000000L);
   }
 }
@@ -445,14 +444,13 @@ void setup() {
       rtc.adjust(DateTime(iso8601date));
       now = rtc.now();
 
-      // play(BUZZER_CHANNEL, Skala); TODO
-
-      chirp(5);
+      play(BUZZER_CHANNEL, Skala, sizeof(Skala) / sizeof(char *));
       powerOff(now);
 
       // if button is kept pressed, sleep
       esp_sleep_enable_timer_wakeup(2000000L);
-      esp_deep_sleep_start();
+      esp_light_sleep_start();
+      // esp_deep_sleep_start();
     }
   }
 
