@@ -13,19 +13,21 @@ NOTE_A, NOTE_Bb, NOTE_B, NOTE_MAX } note_t;
 
 // Ringtones: https://www.convertyourtone.com/ringtones.html
 
-const char *Muppets[] = {
-    "d=4", "o=5", "b=250", "c6",  "c6", "a",  "b",  "8a", "b",  "g",  "p",
-    "c6",  "c6",  "a",     "8b",  "8a", "8p", "g.", "p",  "e",  "e",  "g",
-    "f",   "8e",  "f",     "8c6", "8c", "8d", "e",  "8e", "8e", "8p", "8e",
-    "g",   "2p",  "c6",    "c6",  "a",  "b",  "8a", "b",  "g",  "p",  "c6",
-    "c6",  "a",   "8b",    "a",   "g.", "p",  "e",  "e",  "g",  "f",  "8e",
-    "f",   "8c6", "8c",    "8d",  "e",  "8e", "d",  "8d", "c"};
-
 const char *HauntHouse[] = {
     "d=4",  "o=5", "b=108", "2a4", "2e",  "2d#", "2b4", "2a4", "2c",  "2d",
     "2a#4", "2e.", "e",     "1f4", "1a4", "1d#", "2e.", "d",   "2c.", "b4",
     "1a4",  "1p",  "2a4",   "2e",  "2d#", "2b4", "2a4", "2c",  "2d",  "2a#4",
     "2e.",  "e",   "1f4",   "1a4", "1d#", "2e.", "d",   "2c.", "b4",  "1a4"};
+
+const char *PinkPanther[] = {
+    "d=4", "o=5", "b=160", "8d#", "8e",  "2p",  "8f#", "8g",  "2p",  "8d#",
+    "8e",  "16p", "8f#",   "8g",  "16p", "8c6", "8b",  "16p", "8d#", "8e",
+    "16p", "8b",  "2a#",   "2p",  "16a", "16g", "16e", "16d", "2e"};
+
+const char *Simpsons[] = {"d=4", "o=5", "b=160", "c.6", "e6",  "f#6", "8a6",
+                          "g.6", "e6",  "c6",    "8a",  "8f#", "8f#", "8f#",
+                          "2g",  "8p",  "8p",    "8f#", "8f#", "8f#", "8g",
+                          "a#.", "8c6", "8c6",   "8c6", "c6"};
 
 // https://www.vex.net/~lawrence/ringtones.html#nonmusic
 
@@ -133,6 +135,6 @@ note_t noteLookUp(const char *note) {
   if (strcmp(note, "g#") == 0) {
     return NOTE_Gs;
   }
-  Serial.printf("Note: %s not identified\n", note);
+  //Serial.printf("Note: %s not identified\n", note);
   return NOTE_MAX;
 }
