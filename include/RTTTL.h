@@ -39,26 +39,26 @@ const char *Urgent[] = {"d=8", "o=6", "b=500", "c", "e",  "d7", "c", "e",
 
 note_t noteLookUp(const char *note);
 
-void play(uint8_t channel, const char *music[]) {
-  const char numbers[] = "1234567890";
+void play(uint8_t channel, const char *music[], int16_t music_size) {
+  const char numbers[] = "1234567890.";
 
-  uint8_t duration = (uint8_t)music[0][2];  // how long or short a note lasts
-  uint8_t octave =
-      (uint8_t)music[1][2];  // the interval between one musical pitch and
-                             // another with double its frequency
+  uint8_t duration = music[0][2] - '0';  // how long or short a note lasts
+
+  uint8_t octave = music[1][2] - '0';  // the interval between one musical pitch
+                                       // and another with double its frequency
 
   char _tempo[4];
   strcpy(_tempo, music[2] + 2);
   uint8_t tempo =
       atoi(_tempo);  // usually measured in beats per minute (or bpm)
 
-  uint8_t noteDuration = (60000 * 2) / tempo;
+  uint16_t noteDuration = (60000 * 2) / tempo;
 
   note_t thisNote;
-  uint8_t thisDuration;
+  uint16_t thisDuration;
   uint8_t thisOctave;
-  // TODO, sizeof is funny
-  for (int i = 3; i < ((sizeof(music) / sizeof(music[0])) - 3); i++) {
+
+  for (int i = 3; i < music_size; i++) {
     uint8_t _d = strspn(music[i], numbers);
 
     if (_d > 0) {
@@ -75,13 +75,14 @@ void play(uint8_t channel, const char *music[]) {
     uint8_t _o = strspn(music[i] + _d + _n, numbers);
 
     if (_o > 0) {
-      thisOctave = atoi(music[i + _d + _n]);
+      thisOctave = atoi(music[i] + _d + _n);
     } else {
       thisOctave = octave;
     }
 
     if (strchr(music[i], '.') != NULL) {
       thisDuration *= 1.5;
+      thisOctave = octave;
     }
 
     if (strcmp(note_char, "p") == 0) {
